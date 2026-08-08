@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="es-MX">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Asia 2026</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#14202B" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0D141B" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Asia 2026">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<style>
+:root{
+  --bg:#EEF1F3; --card:#FFFFFF; --ink:#14202B; --muted:#6B7A87;
+  --line:#DCE2E7; --acc:#0B6B58; --acc-soft:#E3EFEB;
+  --amber:#B4791A; --red:#B3261E; --nav:rgba(255,255,255,.94);
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+  --safe-b:env(safe-area-inset-bottom,0px);
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#0D141B; --card:#16202A; --ink:#E8EDF1; --muted:#8A99A6;
+  --line:#26323D; --acc:#2FA98D; --acc-soft:#173029;
+  --amber:#D89A3D; --red:#E5655C; --nav:rgba(22,32,42,.94);
+}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg);color:var(--ink);font-family:var(--sans);
+  font-size:15px;line-height:1.45;
+  padding-bottom:calc(70px + var(--safe-b));
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:540px;margin:0 auto;padding:0 14px}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.eyebrow{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+
+/* ---------- encabezado ---------- */
+header{padding:calc(14px + env(safe-area-inset-top,0px)) 0 6px}
+header h1{font-size:15px;font-weight:600;margin:0;letter-spacing:-.01em}
+header .sub{font-size:11px;color:var(--muted);margin-top:1px}
+
+/* ---------- tarjetas ---------- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:12px}
+.hero{padding:20px 18px}
+.hero .big{font-size:40px;font-weight:600;line-height:1;margin:6px 0 2px}
+.hero .note{font-size:12px;color:var(--muted)}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.split .v{font-size:19px;font-weight:600;margin-top:3px}
+.pos{color:var(--acc)} .neg{color:var(--red)} .warn{color:var(--amber)}
+
+.bar{height:5px;background:var(--line);border-radius:99px;overflow:hidden;margin-top:10px}
+.bar i{display:block;height:100%;background:var(--acc);border-radius:99px;transition:width .3s}
+
+/* ---------- lista tipo boleto ---------- */
+.daygroup{margin-bottom:14px}
+.dayhead{display:flex;justify-content:space-between;align-items:baseline;padding:0 4px 6px;position:sticky;top:0;background:var(--bg);z-index:2}
+.dayhead .d{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+.dayhead .s{font-size:11px;color:var(--muted)}
+.rows{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.row{display:flex;align-items:center;gap:10px;padding:11px 12px 11px 0;border-bottom:1px solid var(--line);position:relative}
+.row:last-child{border-bottom:none}
+.stub{width:5px;align-self:stretch;flex:none;margin-right:7px;
+  background:repeating-linear-gradient(to bottom,var(--line) 0 4px,transparent 4px 8px)}
+.row.ok .stub{background:var(--acc)}
+.row .body{flex:1;min-width:0}
+.row .t{font-size:14px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row.ok .t{color:var(--muted)}
+.row .m{font-size:11px;color:var(--muted);margin-top:1px}
+.row .amt{text-align:right;flex:none}
+.row .amt b{font-size:14px;font-weight:600;display:block}
+.row .amt span{font-size:10px;color:var(--muted);display:block;margin-top:1px}
+.tick{flex:none;width:34px;height:34px;border-radius:10px;border:1px solid var(--line);
+  background:transparent;display:grid;place-items:center;cursor:pointer;padding:0}
+.tick svg{width:15px;height:15px;stroke:var(--muted);stroke-width:2.6;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.row.ok .tick{background:var(--acc);border-color:var(--acc)}
+.row.ok .tick svg{stroke:#fff}
+.hit{position:absolute;inset:0 48px 0 0;cursor:pointer}
+
+/* ---------- controles ---------- */
+.chips{display:flex;gap:6px;margin:2px 0 12px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.chip{flex:none;padding:7px 13px;border-radius:99px;border:1px solid var(--line);background:var(--card);
+  font-size:12.5px;font-weight:500;color:var(--muted);cursor:pointer}
+.chip.on{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+button{font-family:inherit}
+.btn{width:100%;padding:14px;border-radius:12px;border:none;background:var(--acc);color:#fff;
+  font-size:15px;font-weight:600;cursor:pointer}
+.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
+.btn.danger{background:transparent;border:1px solid var(--line);color:var(--red)}
+.fab{position:fixed;right:calc(50% - 270px + 16px);bottom:calc(84px + var(--safe-b));width:54px;height:54px;
+  border-radius:50%;background:var(--ink);color:var(--bg);border:none;font-size:27px;line-height:1;
+  box-shadow:0 6px 18px rgba(20,32,43,.28);cursor:pointer;z-index:40}
+@media(max-width:572px){.fab{right:16px}}
+
+/* ---------- barra inferior ---------- */
+nav{position:fixed;left:0;right:0;bottom:0;background:var(--nav);
+  backdrop-filter:saturate(180%) blur(12px);border-top:1px solid var(--line);
+  padding-bottom:var(--safe-b);z-index:50}
+nav .inner{max-width:540px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
+nav button{background:none;border:none;padding:9px 0 8px;font-size:10.5px;font-weight:600;
+  color:var(--muted);cursor:pointer;display:grid;justify-items:center;gap:3px}
+nav button.on{color:var(--acc)}
+nav svg{width:21px;height:21px;stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---------- hoja inferior ---------- */
+.veil{position:fixed;inset:0;background:rgba(20,32,43,.45);z-index:60;display:none}
+.veil.on{display:block}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:61;background:var(--card);
+  border-radius:18px 18px 0 0;padding:18px 16px calc(18px + var(--safe-b));
+  max-width:540px;margin:0 auto;transform:translateY(101%);transition:transform .22s ease;
+  max-height:92vh;overflow-y:auto}
+.sheet.on{transform:translateY(0)}
+.sheet h2{font-size:17px;margin:0 0 2px;font-weight:600}
+.sheet .cap{font-size:12px;color:var(--muted);margin-bottom:16px}
+label{display:block;margin-bottom:12px}
+label .lb{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;display:block}
+input,select,textarea{width:100%;padding:12px;border:1px solid var(--line);border-radius:10px;
+  font-size:16px;font-family:inherit;background:var(--card);color:var(--ink)}
+input.big{font-family:var(--mono);font-size:26px;font-weight:600;text-align:center;padding:14px}
+textarea{font-family:var(--mono);font-size:12px;min-height:110px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.acts{display:grid;gap:8px;margin-top:6px}
+.conv{text-align:center;font-size:12.5px;color:var(--muted);margin:-6px 0 12px}
+
+/* ---------- tablas de resumen ---------- */
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:right;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);padding:0 0 8px;border-bottom:1px solid var(--line)}
+.tbl th:first-child{text-align:left}
+.tbl td{padding:9px 0;border-bottom:1px solid var(--line);text-align:right}
+.tbl td:first-child{text-align:left;font-weight:500}
+.tbl tr:last-child td{border-bottom:none}
+.mini{height:4px;background:var(--line);border-radius:99px;margin-top:5px;overflow:hidden}
+.mini i{display:block;height:100%;background:var(--acc)}
+.empty{text-align:center;color:var(--muted);font-size:13.5px;padding:26px 10px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(96px + var(--safe-b));
+  background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:99px;font-size:13px;font-weight:500;
+  z-index:80;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.on{opacity:1}
+.btn:active,.tick:active,.chip:active{transform:scale(.96)}
+.fab:active{transform:scale(.92)}
+.btn,.tick,.chip,.fab{transition:transform .08s ease}
+.trip{display:inline-flex;align-items:center;gap:5px;margin-top:7px;padding:4px 11px;border-radius:99px;
+  background:var(--acc-soft);color:var(--acc);font-size:11.5px;font-weight:600}
+.trip::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--acc)}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Viaje Asia 2026</h1>
+    <div class="sub" id="hoy"></div>
+  </header>
+  <main id="view"></main>
+</div>
+
+<button class="fab" id="fab" aria-label="Agregar movimiento">+</button>
+
+<nav><div class="inner">
+  <button data-t="inicio" class="on"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Inicio</button>
+  <button data-t="movs"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Movimientos</button>
+  <button data-t="resumen"><svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>Resumen</button>
+  <button data-t="ajustes"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v2M12 19.5v2M21.5 12h-2M4.5 12h-2M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4M18.7 18.7l-1.4-1.4M6.7 6.7L5.3 5.3"/></svg>Ajustes</button>
+</div></nav>
+
+<div class="veil" id="veil"></div>
+<div class="sheet" id="sheet"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const KEY = "asia2026-v1";
+const MONEDAS = ["MXN","JPY","KRW","CNY","USD"];
+const VIAJE_INI = "2026-08-29", VIAJE_FIN = "2026-09-25"; // fechas del viaje (editable)
+const CATS = ["Hospedaje","Comida","Transporte","Traslados","Atracciones","Conectividad","Hogar","Ingreso","Otro"];
+
+const SEED = [
+ ["2026-08-08","Tren Tokyo - Kyoto","Transporte","gasto",2600],
+ ["2026-08-08","Zumo flight","Transporte","gasto",2172],
+ ["2026-08-11","Tren Kyoto - Osaka","Transporte","gasto",2600],
+ ["2026-08-15","Ingreso quincenal","Ingreso","ingreso",70000],
+ ["2026-08-15","Renta","Hogar","gasto",26850],
+ ["2026-08-15","GreenHouse Shanghai","Atracciones","gasto",510],
+ ["2026-08-21","Tren Beijing - Shanghai","Transporte","gasto",2600],
+ ["2026-08-22","Shanghai Tower","Atracciones","gasto",930],
+ ["2026-08-22","Shibuya Sky","Atracciones","gasto",600],
+ ["2026-08-28","esim EUA","Conectividad","gasto",395],
+ ["2026-08-28","VPN Asia","Conectividad","gasto",1200],
+ ["2026-08-28","esim Asia","Conectividad","gasto",1100],
+ ["2026-08-29","Hospedaje 1 LAX","Hospedaje","gasto",26722],
+ ["2026-08-29","Comida (bolsa del bloque)","Comida","gasto",6000],
+ ["2026-08-29","Traslados (bolsa del bloque)","Traslados","gasto",2000],
+ ["2026-09-01","Ingreso quincenal","Ingreso","ingreso",70000],
+ ["2026-09-01","Comida (bolsa del bloque)","Comida","gasto",12000],
+ ["2026-09-01","Traslados (bolsa del bloque)","Traslados","gasto",5000],
+ ["2026-09-03","Hospedaje Tokyo","Hospedaje","gasto",28340],
+ ["2026-09-07","Premier Access (5 atracciones p/p)","Atracciones","gasto",2000],
+ ["2026-09-08","Hospedaje Kyoto","Hospedaje","gasto",7331],
+ ["2026-09-11","Hospedaje Osaka","Hospedaje","gasto",2668],
+ ["2026-09-12","Hospedaje Seúl","Hospedaje","gasto",11315],
+ ["2026-09-13","Ciudad Prohibida","Atracciones","gasto",350],
+ ["2026-09-15","Ingreso quincenal","Ingreso","ingreso",70000],
+ ["2026-09-15","Renta","Hogar","gasto",26850],
+ ["2026-09-15","Comida (bolsa del bloque)","Comida","gasto",12000],
+ ["2026-09-15","Traslados (bolsa del bloque)","Traslados","gasto",5000],
+ ["2026-09-16","Hospedaje Beijing","Hospedaje","gasto",6413],
+ ["2026-09-17","Muralla China","Atracciones","gasto",1550],
+ ["2026-09-18","Teleférico y tobogán","Atracciones","gasto",1100],
+ ["2026-09-21","Hospedaje Shanghai","Hospedaje","gasto",9612],
+ ["2026-09-21","Paseo en barco Pudong","Atracciones","gasto",800],
+ ["2026-09-22","Bund Sightseeing Tunnel","Atracciones","gasto",500],
+ ["2026-09-25","Hospedaje 2 LAX","Hospedaje","gasto",3530],
+ ["2026-10-01","Ingreso quincenal","Ingreso","ingreso",70000],
+ ["2026-10-15","Ingreso quincenal","Ingreso","ingreso",70000],
+ ["2026-10-15","Renta","Hogar","gasto",26850],
+ ["2026-11-01","Ingreso quincenal","Ingreso","ingreso",70000]
+];
+
+function nuevoEstado(){
+  return {
+    ajustes:{ saldoInicial:40000, tasas:{MXN:1, JPY:0.125, KRW:0.0135, CNY:2.60, USD:18.50} },
+    movs: SEED.map((s,i)=>({
+      id:"s"+i, fecha:s[0], concepto:s[1], categoria:s[2], tipo:s[3],
+      montoPlan:s[4], montoReal:null, estado:"pendiente", moneda:null, montoLocal:null, nota:""
+    }))
+  };
+}
+
+let S;
+try{ S = JSON.parse(localStorage.getItem(KEY)) || nuevoEstado(); }catch(e){ S = nuevoEstado(); }
+if(!S.ajustes || !Array.isArray(S.movs)) S = nuevoEstado();
+
+function guardar(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){ aviso("No se pudo guardar"); } }
+
+/* ---------------- utilidades ---------------- */
+const fmt = n => new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN",maximumFractionDigits:0}).format(n||0);
+const fmtS = n => (n>0?"+":"") + fmt(n);
+const hoyISO = () => { const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
+const aDate = iso => { const [y,m,d]=iso.split("-").map(Number); return new Date(y,m-1,d); };
+const fechaLarga = iso => new Intl.DateTimeFormat("es-MX",{weekday:"short",day:"numeric",month:"short"}).format(aDate(iso));
+const signo = m => m.tipo==="ingreso" ? 1 : -1;
+const efectivo = m => signo(m) * (m.estado==="confirmado" ? (m.montoReal??m.montoPlan) : m.montoPlan);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const orden = () => S.movs.slice().sort((a,b)=> a.fecha===b.fecha ? (signo(b)-signo(a)) : a.fecha.localeCompare(b.fecha));
+const quincena = iso => { const [y,m,d]=iso.split("-").map(Number); return y+"-"+String(m).padStart(2,"0")+"-Q"+(d<15?1:2); };
+
+function calc(){
+  const conf = S.movs.filter(m=>m.estado==="confirmado");
+  const pend = S.movs.filter(m=>m.estado==="pendiente");
+  const saldoReal = S.ajustes.saldoInicial + conf.reduce((a,m)=>a+efectivo(m),0);
+  const porVenir  = pend.reduce((a,m)=>a+efectivo(m),0);
+  const desv = conf.reduce((a,m)=>a + signo(m)*((m.montoReal??m.montoPlan) - m.montoPlan), 0);
+  return { conf, pend, saldoReal, saldoProy: saldoReal+porVenir, desv,
+           gastadoViaje: conf.filter(m=>m.tipo==="gasto"&&m.categoria!=="Hogar").reduce((a,m)=>a+(m.montoReal??m.montoPlan),0) };
+}
+
+function aviso(t){ const el=document.getElementById("toast"); el.textContent=t; el.classList.add("on"); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove("on"),1900); }
+
+/* ---------------- hoja inferior ---------------- */
+const veil=document.getElementById("veil"), sheet=document.getElementById("sheet");
+function abrir(html){ sheet.innerHTML=html; veil.classList.add("on"); requestAnimationFrame(()=>sheet.classList.add("on")); }
+function cerrar(){ sheet.classList.remove("on"); veil.classList.remove("on"); }
+veil.onclick = cerrar;
+
+/* ---------------- vistas ---------------- */
+let tab="inicio";
+const view=document.getElementById("view");
+let _dia = hoyISO();
+function pintaHeader(){
+  const hoy=hoyISO();
+  let chip="";
+  if(hoy<VIAJE_INI){
+    const f=Math.round((aDate(VIAJE_INI)-aDate(hoy))/864e5);
+    chip=`<div class="trip">${f===1?"El viaje empieza mañana":"Faltan "+f+" días para el viaje"}</div>`;
+  }else if(hoy<=VIAJE_FIN){
+    const d=Math.round((aDate(hoy)-aDate(VIAJE_INI))/864e5)+1;
+    const t=Math.round((aDate(VIAJE_FIN)-aDate(VIAJE_INI))/864e5)+1;
+    chip=`<div class="trip">Día ${d} de ${t} del viaje</div>`;
+  }
+  document.getElementById("hoy").innerHTML = "Hoy es " + fechaLarga(hoy) + chip;
+}
+pintaHeader();
+document.addEventListener("visibilitychange",()=>{
+  if(document.visibilityState==="visible" && hoyISO()!==_dia){ _dia=hoyISO(); pintaHeader(); render(); }
+});
+
+function render(){
+  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.t===tab));
+  document.getElementById("fab").style.display = (tab==="inicio"||tab==="movs") ? "block" : "none";
+  view.innerHTML = ({inicio:vInicio, movs:vMovs, resumen:vResumen, ajustes:vAjustes})[tab]();
+  enlazar();
+}
+
+function filaHTML(m, saldo){
+  const monto = m.estado==="confirmado" ? (m.montoReal??m.montoPlan) : m.montoPlan;
+  const dif = m.estado==="confirmado" ? signo(m)*(monto-m.montoPlan) : 0;
+  const cls = m.tipo==="ingreso" ? "pos" : "";
+  let sub = m.categoria;
+  if(m.estado==="confirmado" && m.moneda && m.moneda!=="MXN") sub += " · "+m.montoLocal.toLocaleString("es-MX")+" "+m.moneda;
+  else if(m.estado==="confirmado" && dif!==0) sub += " · plan "+fmt(m.montoPlan);
+  if(m.nota) sub += " · "+m.nota;
+  return `<div class="row ${m.estado==="confirmado"?"ok":""}" data-id="${m.id}">
+    <div class="stub"></div><div class="hit" data-act="editar"></div>
+    <div class="body"><div class="t">${esc(m.concepto)}</div><div class="m">${esc(sub)}</div></div>
+    <div class="amt"><b class="${dif<0?"neg":cls}">${m.tipo==="ingreso"?"+":"−"}${fmt(monto).replace("-","")}</b>
+      <span class="num">${fmt(saldo)}</span></div>
+    <button class="tick" data-act="tick" aria-label="Confirmar"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.2 5L20 6.5"/></svg></button>
+  </div>`;
+}
+
+function listaHTML(movs){
+  if(!movs.length) return `<div class="card"><div class="empty">Nada por aquí todavía.<br>Usa el botón + para registrar un movimiento.</div></div>`;
+  // saldo corrido sobre TODOS los movimientos, en orden
+  const saldos={}, cierre={}; let s=S.ajustes.saldoInicial;
+  orden().forEach(m=>{ s+=efectivo(m); saldos[m.id]=s; cierre[m.fecha]=s; });
+  let out="", dia=null;
+  movs.forEach(m=>{
+    if(m.fecha!==dia){
+      if(dia) out+="</div></div>";
+      dia=m.fecha;
+      out+=`<div class="daygroup"><div class="dayhead"><span class="d">${fechaLarga(dia)}</span><span class="s num">${fmt(cierre[dia])}</span></div><div class="rows">`;
+    }
+    out+=filaHTML(m,saldos[m.id]);
+  });
+  return out+"</div></div>";
+}
+
+function vInicio(){
+  const c=calc(), hoy=hoyISO();
+  const lim=new Date(aDate(hoy).getTime()+3*864e5);
+  const atrasados = S.movs.filter(m=>m.estado==="pendiente" && m.fecha<hoy);
+  let prox = orden().filter(m=> (m.estado==="pendiente" && aDate(m.fecha)<=lim) || (m.fecha>=hoy && aDate(m.fecha)<=lim) );
+  let titulo = atrasados.length ? "Sin confirmar y próximos días" : "Hoy y próximos 3 días";
+  if(!prox.length){
+    const sig = orden().filter(m=>m.estado==="pendiente")[0];
+    prox = sig?[sig]:[]; titulo="Siguiente movimiento";
+  }
+  const total=S.movs.length, hechos=c.conf.length;
+  const dcls = c.desv<0?"neg":(c.desv>0?"pos":"");
+  return `
+  <div class="card hero">
+    <div class="eyebrow">Saldo real ahora</div>
+    <div class="big num">${fmt(c.saldoReal)}</div>
+    <div class="note">${hechos} de ${total} movimientos confirmados${atrasados.length?` · <b class="warn">${atrasados.length} sin confirmar</b>`:""}</div>
+    <div class="bar"><i style="width:${total?Math.round(hechos/total*100):0}%"></i></div>
+    <div class="split">
+      <div><div class="eyebrow">Proyectado al cierre</div><div class="v num">${fmt(c.saldoProy)}</div></div>
+      <div><div class="eyebrow">Desviación vs. plan</div><div class="v num ${dcls}">${fmtS(c.desv)}</div></div>
+    </div>
+  </div>
+  <div class="eyebrow" style="padding:4px 4px 8px">${titulo}</div>
+  ${listaHTML(prox)}`;
+}
+
+let filtro="pendiente";
+function vMovs(){
+  const movs = orden().filter(m=> filtro==="todos" ? true : m.estado===filtro );
+  return `<div class="chips">
+      <button class="chip ${filtro==="pendiente"?"on":""}" data-f="pendiente">Pendientes</button>
+      <button class="chip ${filtro==="confirmado"?"on":""}" data-f="confirmado">Confirmados</button>
+      <button class="chip ${filtro==="todos"?"on":""}" data-f="todos">Todos</button>
+    </div>${listaHTML(movs)}`;
+}
+
+function vResumen(){
+  const c=calc();
+  const cats = CATS.map(cat=>{
+    const ms=S.movs.filter(m=>m.categoria===cat && m.tipo==="gasto");
+    return {cat,
+      plan: ms.reduce((a,m)=>a+m.montoPlan,0),
+      real: ms.filter(m=>m.estado==="confirmado").reduce((a,m)=>a+(m.montoReal??m.montoPlan),0)};
+  }).filter(x=>x.plan>0).sort((a,b)=>b.plan-a.plan);
+  const maxc = Math.max(...cats.map(x=>x.plan),1);
+
+  const qs=[...new Set(orden().map(m=>quincena(m.fecha)))];
+  let s=S.ajustes.saldoInicial;
+  const filasQ = qs.map(q=>{
+    const ms=S.movs.filter(m=>quincena(m.fecha)===q);
+    const ing=ms.filter(m=>m.tipo==="ingreso").reduce((a,m)=>a+(m.estado==="confirmado"?(m.montoReal??m.montoPlan):m.montoPlan),0);
+    const gas=ms.filter(m=>m.tipo==="gasto").reduce((a,m)=>a+(m.estado==="confirmado"?(m.montoReal??m.montoPlan):m.montoPlan),0);
+    s = s+ing-gas;
+    const [y,mm,qq]=q.split("-");
+    const et=new Intl.DateTimeFormat("es-MX",{month:"short"}).format(new Date(+y,+mm-1,1));
+    return `<tr><td>${et} ${qq==="Q1"?"1–14":"15–fin"}</td><td class="num pos">${fmt(ing)}</td><td class="num">${fmt(gas)}</td><td class="num"><b>${fmt(s)}</b></td></tr>`;
+  }).join("");
+
+  return `
+  <div class="card">
+    <div class="eyebrow" style="margin-bottom:12px">Gasto por categoría · real vs. plan</div>
+    <table class="tbl"><thead><tr><th>Categoría</th><th>Ejercido</th><th>Plan</th></tr></thead><tbody>
+    ${cats.map(x=>`<tr><td>${x.cat}<div class="mini"><i style="width:${Math.round(x.plan/maxc*100)}%;background:${x.real>x.plan?"var(--red)":"var(--acc)"};opacity:.35"></i></div></td>
+      <td class="num ${x.real>x.plan?"neg":""}">${fmt(x.real)}</td><td class="num" style="color:var(--muted)">${fmt(x.plan)}</td></tr>`).join("")}
+    </tbody></table>
+  </div>
+  <div class="card">
+    <div class="eyebrow" style="margin-bottom:12px">Por quincena</div>
+    <table class="tbl"><thead><tr><th>Periodo</th><th>Entra</th><th>Sale</th><th>Saldo</th></tr></thead><tbody>${filasQ}</tbody></table>
+  </div>
+  <div class="card">
+    <div class="eyebrow" style="margin-bottom:10px">Viaje</div>
+    <table class="tbl"><tbody>
+      <tr><td>Gastado en el viaje (confirmado)</td><td class="num">${fmt(c.gastadoViaje)}</td></tr>
+      <tr><td>Movimientos pendientes</td><td class="num">${c.pend.length}</td></tr>
+      <tr><td>Saldo proyectado al cierre</td><td class="num"><b>${fmt(c.saldoProy)}</b></td></tr>
+    </tbody></table>
+  </div>`;
+}
+
+function vAjustes(){
+  const t=S.ajustes.tasas;
+  return `
+  <div class="card">
+    <div class="eyebrow" style="margin-bottom:12px">Saldo inicial</div>
+    <label><span class="lb">Efectivo con el que arrancaste</span>
+      <input type="number" inputmode="decimal" id="si" value="${S.ajustes.saldoInicial}"></label>
+    <button class="btn" id="gsi">Guardar saldo inicial</button>
+  </div>
+  <div class="card">
+    <div class="eyebrow" style="margin-bottom:4px">Tipo de cambio a pesos</div>
+    <div class="cap" style="font-size:12px;color:var(--muted);margin-bottom:12px">Cuántos pesos vale 1 unidad. Actualízalos cuando cambies dinero.</div>
+    <div class="grid2">
+      ${["JPY","KRW","CNY","USD"].map(k=>`<label><span class="lb">${k}</span><input type="number" step="0.0001" inputmode="decimal" data-tasa="${k}" value="${t[k]}"></label>`).join("")}
+    </div>
+    <button class="btn" id="gtasas">Guardar tipos de cambio</button>
+  </div>
+  <div class="card">
+    <div class="eyebrow" style="margin-bottom:4px">Respaldo</div>
+    <div class="cap" style="font-size:12px;color:var(--muted);margin-bottom:12px">Los datos viven sólo en este teléfono. Descarga un respaldo antes de salir de viaje.</div>
+    <div class="acts">
+      <button class="btn ghost" id="exp">Descargar respaldo</button>
+      <button class="btn ghost" id="imp">Restaurar desde respaldo</button>
+      <button class="btn danger" id="reset">Volver al plan original</button>
+    </div>
+  </div>
+  <div style="text-align:center;font-size:11px;color:var(--muted);padding:2px 0 10px">Asia 2026 · v1.1 · datos sólo en este dispositivo</div>`;
+}
+
+/* ---------------- acciones ---------------- */
+function hojaConfirmar(m){
+  const plan=m.montoPlan, ya=m.estado==="confirmado";
+  abrir(`
+    <h2>${esc(m.concepto)}</h2>
+    <div class="cap">${fechaLarga(m.fecha)} · plan ${fmt(plan)}</div>
+    <div class="chips" id="mons">${MONEDAS.map(x=>`<button class="chip ${x===(m.moneda||"MXN")?"on":""}" data-mon="${x}">${x}</button>`).join("")}</div>
+    <input class="big" type="number" inputmode="decimal" id="mreal" value="${ya?(m.moneda&&m.moneda!=="MXN"?m.montoLocal:m.montoReal):plan}">
+    <div class="conv" id="conv"></div>
+    <div class="acts">
+      <button class="btn" id="ok">${ya?"Guardar cambios":"Confirmar movimiento"}</button>
+      ${ya?`<button class="btn ghost" id="undo">Marcar como pendiente</button>`:""}
+      <button class="btn ghost" id="cx">Cancelar</button>
+    </div>`);
+  let mon = m.moneda||"MXN";
+  const inp=document.getElementById("mreal"), conv=document.getElementById("conv");
+  const pinta=()=>{
+    const v=parseFloat(inp.value)||0, mxn=mon==="MXN"?v:v*S.ajustes.tasas[mon];
+    conv.textContent = mon==="MXN" ? "Pesos mexicanos" : `= ${fmt(mxn)} · tipo de cambio ${S.ajustes.tasas[mon]}`;
+  };
+  document.getElementById("mons").onclick=e=>{
+    const b=e.target.closest("[data-mon]"); if(!b) return;
+    const antes=mon; mon=b.dataset.mon;
+    // convertir el valor mostrado a la nueva moneda para no guardar unidades equivocadas
+    const v=parseFloat(inp.value);
+    if(!isNaN(v) && antes!==mon){
+      const mxn = antes==="MXN" ? v : v*S.ajustes.tasas[antes];
+      const nv = mon==="MXN" ? mxn : mxn/S.ajustes.tasas[mon];
+      inp.value = mon==="MXN" ? Math.round(mxn) : Math.round(nv);
+    }
+    document.querySelectorAll("#mons .chip").forEach(c=>c.classList.toggle("on",c.dataset.mon===mon));
+    pinta();
+  };
+  inp.oninput=pinta; pinta();
+  inp.focus(); inp.select();
+  document.getElementById("ok").onclick=()=>{
+    const v=parseFloat(inp.value); if(isNaN(v)||v<0) return aviso("Escribe un monto válido");
+    m.montoReal = mon==="MXN" ? v : Math.round(v*S.ajustes.tasas[mon]);
+    m.moneda=mon; m.montoLocal = mon==="MXN"?null:v; m.estado="confirmado";
+    guardar(); cerrar(); render(); aviso("Confirmado");
+  };
+  document.getElementById("cx").onclick=cerrar;
+  if(ya) document.getElementById("undo").onclick=()=>{
+    m.estado="pendiente"; m.montoReal=null; m.moneda=null; m.montoLocal=null;
+    guardar(); cerrar(); render(); aviso("De vuelta a pendiente");
+  };
+}
+
+function hojaEditar(m){
+  const nuevo = !m;
+  m = m || {id:"m"+Date.now(), fecha:hoyISO(), concepto:"", categoria:"Comida", tipo:"gasto", montoPlan:0, montoReal:null, estado:"pendiente", moneda:null, montoLocal:null, nota:""};
+  abrir(`
+    <h2>${nuevo?"Nuevo movimiento":"Editar movimiento"}</h2>
+    <div class="cap">${nuevo?"Se agrega como pendiente.":"Cambia lo que necesites."}</div>
+    <label><span class="lb">Concepto</span><input id="e-con" value="${esc(m.concepto)}" placeholder="Ramen en Shinjuku"></label>
+    <div class="grid2">
+      <label><span class="lb">Fecha</span><input type="date" id="e-fec" value="${m.fecha}"></label>
+      <label><span class="lb">Monto planeado (MXN)</span><input type="number" inputmode="decimal" id="e-mon" value="${m.montoPlan}"></label>
+    </div>
+    <label><span class="lb">Nota (opcional)</span><input id="e-nota" value="${esc(m.nota||"")}" placeholder="Reserva #, recordatorio…"></label>
+    <div class="grid2">
+      <label><span class="lb">Categoría</span><select id="e-cat">${CATS.map(c=>`<option ${c===m.categoria?"selected":""}>${c}</option>`).join("")}</select></label>
+      <label><span class="lb">Tipo</span><select id="e-tip"><option value="gasto" ${m.tipo==="gasto"?"selected":""}>Gasto</option><option value="ingreso" ${m.tipo==="ingreso"?"selected":""}>Ingreso</option></select></label>
+    </div>
+    <div class="acts">
+      <button class="btn" id="e-ok">${nuevo?"Agregar movimiento":"Guardar cambios"}</button>
+      ${nuevo?"":`<button class="btn danger" id="e-del">Eliminar movimiento</button>`}
+      <button class="btn ghost" id="e-cx">Cancelar</button>
+    </div>`);
+  document.getElementById("e-ok").onclick=()=>{
+    const con=document.getElementById("e-con").value.trim();
+    const mp=parseFloat(document.getElementById("e-mon").value);
+    if(!con) return aviso("Falta el concepto");
+    if(isNaN(mp)||mp<0) return aviso("Escribe un monto válido");
+    m.concepto=con; m.fecha=document.getElementById("e-fec").value;
+    m.nota=document.getElementById("e-nota").value.trim(); m.montoPlan=mp; m.categoria=document.getElementById("e-cat").value; m.tipo=document.getElementById("e-tip").value;
+    if(nuevo) S.movs.push(m);
+    guardar(); cerrar(); render(); aviso(nuevo?"Movimiento agregado":"Cambios guardados");
+  };
+  if(!nuevo) document.getElementById("e-del").onclick=()=>{
+    S.movs=S.movs.filter(x=>x.id!==m.id); guardar(); cerrar(); render(); aviso("Movimiento eliminado");
+  };
+  document.getElementById("e-cx").onclick=cerrar;
+}
+
+function enlazar(){
+  view.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{filtro=b.dataset.f;render();});
+  view.querySelectorAll(".row").forEach(r=>{
+    const m=S.movs.find(x=>x.id===r.dataset.id);
+    r.querySelector('[data-act="tick"]').onclick=e=>{e.stopPropagation();hojaConfirmar(m);};
+    r.querySelector('[data-act="editar"]').onclick=()=>hojaEditar(m);
+  });
+  const si=document.getElementById("gsi");
+  if(si) si.onclick=()=>{ const v=parseFloat(document.getElementById("si").value);
+    if(isNaN(v)) return aviso("Monto inválido");
+    S.ajustes.saldoInicial=v; guardar(); render(); aviso("Saldo inicial actualizado"); };
+  const gt=document.getElementById("gtasas");
+  if(gt) gt.onclick=()=>{ document.querySelectorAll("[data-tasa]").forEach(i=>{
+      const v=parseFloat(i.value); if(!isNaN(v)&&v>0) S.ajustes.tasas[i.dataset.tasa]=v; });
+    guardar(); render(); aviso("Tipos de cambio actualizados"); };
+  const ex=document.getElementById("exp");
+  if(ex) ex.onclick=async()=>{
+    const json=JSON.stringify(S,null,1), nombre="asia2026-"+hoyISO()+".json";
+    const file=new File([json],nombre,{type:"application/json"});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      try{ await navigator.share({files:[file],title:"Respaldo Asia 2026"}); aviso("Respaldo compartido"); return; }
+      catch(e){ if(e.name==="AbortError") return; }
+    }
+    try{
+      const a=document.createElement("a");
+      a.href=URL.createObjectURL(new Blob([json],{type:"application/json"}));
+      a.download=nombre; document.body.appendChild(a); a.click(); a.remove();
+      aviso("Respaldo descargado");
+    }catch(e){
+      abrir(`<h2>Tu respaldo</h2><div class="cap">Copia este texto y guárdalo en Notas o donde prefieras.</div>
+        <textarea readonly id="jout">${esc(json)}</textarea>
+        <div class="acts"><button class="btn" id="jcp">Copiar todo</button><button class="btn ghost" id="jcx2">Cerrar</button></div>`);
+      document.getElementById("jcp").onclick=()=>{document.getElementById("jout").select();document.execCommand("copy");aviso("Copiado");};
+      document.getElementById("jcx2").onclick=cerrar;
+    } };
+  const im=document.getElementById("imp");
+  if(im) im.onclick=()=>{
+    abrir(`<h2>Restaurar desde respaldo</h2><div class="cap">Elige el archivo .json de tu respaldo. Reemplaza todo lo que tienes ahora.</div>
+      <div class="acts">
+        <button class="btn" id="jfile">Elegir archivo…</button>
+        <input type="file" id="jinput" accept=".json,application/json" style="display:none">
+        <button class="btn ghost" id="jpaste">O pegar el texto</button>
+        <button class="btn ghost" id="jcx">Cancelar</button>
+      </div>`);
+    const aplicar=txt=>{
+      try{ const d=JSON.parse(txt);
+        if(!d.ajustes||!Array.isArray(d.movs)) throw 0;
+        d.movs.forEach(m=>{ if(!m.id||!m.fecha||typeof m.montoPlan!=="number") throw 0; });
+        S=d; guardar(); cerrar(); render(); aviso("Respaldo restaurado ("+d.movs.length+" movimientos)");
+      }catch(e){ aviso("El archivo no es un respaldo válido"); } };
+    document.getElementById("jfile").onclick=()=>document.getElementById("jinput").click();
+    document.getElementById("jinput").onchange=e=>{
+      const f=e.target.files[0]; if(!f) return;
+      const r=new FileReader(); r.onload=()=>aplicar(r.result); r.readAsText(f); };
+    document.getElementById("jpaste").onclick=()=>{
+      abrir(`<h2>Pegar respaldo</h2><div class="cap">Pega aquí el contenido del .json.</div>
+        <textarea id="jj" placeholder="{ ... }"></textarea>
+        <div class="acts"><button class="btn" id="jok">Restaurar</button><button class="btn ghost" id="jcx3">Cancelar</button></div>`);
+      document.getElementById("jok").onclick=()=>aplicar(document.getElementById("jj").value);
+      document.getElementById("jcx3").onclick=cerrar; };
+    document.getElementById("jcx").onclick=cerrar; };
+  const rs=document.getElementById("reset");
+  if(rs) rs.onclick=()=>{
+    abrir(`<h2>Volver al plan original</h2><div class="cap">Se borran tus confirmaciones y los movimientos que hayas creado. Descarga un respaldo antes si quieres conservarlos.</div>
+      <div class="acts"><button class="btn danger" id="rok">Sí, volver al plan original</button><button class="btn ghost" id="rcx">Cancelar</button></div>`);
+    document.getElementById("rok").onclick=()=>{ const aj=S.ajustes; S=nuevoEstado(); S.ajustes=aj; guardar(); cerrar(); render(); aviso("Plan restaurado"); };
+    document.getElementById("rcx").onclick=cerrar; };
+}
+
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{tab=b.dataset.t;window.scrollTo(0,0);render();});
+document.getElementById("fab").onclick=()=>hojaEditar(null);
+render();
+
+if("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(()=>{});
+if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});
+document.addEventListener("keydown",e=>{ if(e.key==="Escape" && sheet.classList.contains("on")) cerrar(); });
+</script>
+</body>
+</html>
