@@ -41,7 +41,8 @@ body{
 /* ---------- encabezado ---------- */
 header{padding:calc(14px + env(safe-area-inset-top,0px)) 0 6px}
 header h1{font-size:15px;font-weight:600;margin:0;letter-spacing:-.01em}
-header .sub{font-size:11px;color:var(--muted);margin-top:1px}
+header .sub{font-size:11px;color:var(--muted);margin-top:3px;
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 
 /* ---------- tarjetas ---------- */
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:12px}
@@ -73,23 +74,26 @@ header .sub{font-size:11px;color:var(--muted);margin-top:1px}
 .row .amt{text-align:right;flex:none}
 .row .amt b{font-size:14px;font-weight:600;display:block}
 .row .amt span{font-size:10px;color:var(--muted);display:block;margin-top:1px}
-.tick{flex:none;width:34px;height:34px;border-radius:10px;border:1px solid var(--line);
-  background:transparent;display:grid;place-items:center;cursor:pointer;padding:0}
-.tick svg{width:15px;height:15px;stroke:var(--muted);stroke-width:2.6;fill:none;stroke-linecap:round;stroke-linejoin:round}
-.row.ok .tick{background:var(--acc);border-color:var(--acc)}
-.row.ok .tick svg{stroke:#fff}
-.hit{position:absolute;inset:0 48px 0 0;cursor:pointer}
+/* toda la fila es tocable: ya no hay ✓ separado del cuerpo */
+.hit{position:absolute;inset:0;cursor:pointer}
+.row.medias .stub{background:repeating-linear-gradient(to bottom,var(--amber) 0 4px,transparent 4px 8px)}
+.row.medias .t{font-weight:600}
 
 /* ---------- controles ---------- */
 .chips{display:flex;gap:6px;margin:2px 0 12px;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .chip{flex:none;padding:7px 13px;border-radius:99px;border:1px solid var(--line);background:var(--card);
   font-size:12.5px;font-weight:500;color:var(--muted);cursor:pointer}
 .chip.on{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+/* los chips de país se ven todos de golpe: son una elección, no una lista larga */
+.chips.wrap{flex-wrap:wrap;overflow:visible}
 button{font-family:inherit}
 .btn{width:100%;padding:14px;border-radius:12px;border:none;background:var(--acc);color:#fff;
   font-size:15px;font-weight:600;cursor:pointer}
 .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink)}
 .btn.danger{background:transparent;border:1px solid var(--line);color:var(--red)}
+/* botón grande del dashboard: registrar un gasto no planeado */
+.btn.grande{padding:17px;font-size:16px;margin-bottom:12px;
+  box-shadow:0 4px 14px rgba(11,107,88,.22)}
 .fab{position:fixed;right:calc(50% - 270px + 16px);bottom:calc(84px + var(--safe-b));width:54px;height:54px;
   border-radius:50%;background:var(--ink);color:var(--bg);border:none;font-size:27px;line-height:1;
   box-shadow:0 6px 18px rgba(20,32,43,.28);cursor:pointer;z-index:40}
@@ -143,8 +147,8 @@ textarea{font-family:var(--mono);font-size:12px;min-height:110px}
 .btn:active,.tick:active,.chip:active{transform:scale(.96)}
 .fab:active{transform:scale(.92)}
 .btn,.tick,.chip,.fab{transition:transform .08s ease}
-.trip{display:inline-flex;align-items:center;gap:5px;margin-top:7px;padding:4px 11px;border-radius:99px;
-  background:var(--acc-soft);color:var(--acc);font-size:11.5px;font-weight:600}
+.trip{display:inline-flex;align-items:center;gap:5px;padding:4px 11px;border-radius:99px;
+  background:var(--acc-soft);color:var(--acc);font-size:11.5px;font-weight:600;flex:none}
 .trip::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--acc)}
 
 /* ---------- bolsas ---------- */
@@ -220,9 +224,10 @@ const KEY = "asia2026-v1";
 const MONEDAS = ["MXN","JPY","KRW","CNY","USD"];
 const VIAJE_INI = "2026-08-29", VIAJE_FIN = "2026-09-25"; // fechas del viaje (editable)
 const CATS = ["Hospedaje","Comida","Transporte","Traslados","Atracciones","Souvenirs","Conectividad","Hogar","Ingreso","Otro"];
-const CATS_BOLSA = ["Comida","Traslados","Souvenirs"];
-const EMOJI = {Comida:"🍜", Traslados:"🚕", Souvenirs:"🎁"};
-const MON_PAIS = {"EUA":"USD", "Japón":"JPY", "Corea":"KRW", "China":"CNY"};
+const EMOJI = {Comida:"🍜", Traslados:"🚕", Souvenirs:"🎁", Hospedaje:"🏨", Transporte:"✈️",
+               Atracciones:"🎟️", Conectividad:"📶", Hogar:"🏠", Ingreso:"💰", Otro:"💸"};
+const PAISES = ["México","EUA","Japón","Corea","China"];
+const MON_PAIS = {"México":"MXN", "EUA":"USD", "Japón":"JPY", "Corea":"KRW", "China":"CNY"};
 const ATAJOS = {MXN:[100,200,500,1000], JPY:[500,1000,3000,5000], KRW:[5000,10000,30000,50000],
                 CNY:[20,50,100,200], USD:[5,10,20,50]};
 const TASAS_DEF = {MXN:1, JPY:0.125, KRW:0.0135, CNY:2.60, USD:18.50};
@@ -282,67 +287,76 @@ const SEED = [
 
 function nuevoEstado(){
   return {
-    ajustes:{ saldoInicial:40000, tasas:Object.assign({},TASAS_DEF), monedaUltima:"MXN" },
+    ajustes:{ saldoInicial:40000, tasas:Object.assign({},TASAS_DEF),
+              monedaUltima:"MXN", paisActual:"México" },
     movs: SEED.map((s,i)=>{
       const m = {
         id:"s"+i, fecha:s[0], concepto:s[1], categoria:s[2], tipo:s[3],
-        montoPlan:s[4], montoReal:null, estado:"pendiente", moneda:null, montoLocal:null, nota:"",
-        bolsa:false, fechaInicio:null, fechaFin:null, pais:null, abonos:[]
+        montoPlan:s[4], estado:"por_pagar", cerradoAMano:false, nota:"",
+        bolsa:false, pais:null, fechaInicio:null, fechaFin:null, abonos:[]
       };
       if(s[5]){
         m.bolsa=true; m.fechaInicio=s[5].ini; m.fechaFin=s[5].fin;
-        m.pais=s[5].pais||null; m.moneda=m.pais?MON_PAIS[m.pais]:null;
+        m.pais=s[5].pais||null;   // sin país no sale en accesos rápidos; se etiqueta en Ajustes
       }
       return m;
     })
   };
 }
 
-/* último día de la quincena que contiene la fecha (fallback de tramo para bolsas legadas) */
-function finQuincena(iso){
-  const [y,m,d]=iso.split("-").map(Number);
-  const dd = d<15 ? 14 : new Date(y,m,0).getDate();
-  return y+"-"+String(m).padStart(2,"0")+"-"+String(dd).padStart(2,"0");
-}
+/* Lleva cualquier estado (localStorage o respaldo .json de v1.x) al modelo de
+   tres estados. La idea central: en v2 el ÚNICO registro de dinero movido son
+   los abonos, así que todo `montoReal` de v1 se convierte en un abono sintético.
 
-/* Normaliza en memoria cualquier estado (localStorage o respaldo .json) a la forma
-   con bolsas y abonos. Es aritméticamente NEUTRAL en los cuatro casos:
-     1. mov normal sin abonos        → abonos:[], bolsa:false   · no mueve nada
-     2. bolsa pendiente sin abonos   → ejercido 0, remanente = plan · igual que antes
-     3. bolsa ya confirmada          → un abono sintético = montoReal · igual que antes
-     4. tasas incompletas            → rellena con los valores por defecto
-   Nunca cambia KEY y nunca inventa movimientos. */
+   Mapeo de los dos estados viejos a los tres nuevos:
+
+     confirmado, ejercido>0 y montoReal===ejercido → pagado (cierre deliberado:
+         así se veía una bolsa liquidada; NO se debe reabrir)
+     confirmado en cualquier otro caso            → abono sintético por la
+         diferencia y luego la regla normal: cubre el plan → pagado,
+         no lo cubre → a_medias
+     pendiente con abonos                         → a_medias
+     pendiente sin abonos                         → por_pagar
+
+   Es aritméticamente neutral en todas las clases menos una, y esa es
+   deliberada: `confirmado + montoReal < montoPlan + sin abonos` es el registro
+   que el botón de "Pagar" de v1.3 dejaba mal cerrado. Reabrirlo es justamente
+   el objetivo de esta versión, y por definición devuelve el remanente al
+   proyectado. `migrar()` es idempotente y no borra campos. Nunca cambia KEY. */
+let REABIERTOS = 0;
 function migrar(st){
   if(!st || !st.ajustes || !Array.isArray(st.movs)) return st;
   const t = st.ajustes.tasas = st.ajustes.tasas || {};
   MONEDAS.forEach(k=>{ if(typeof t[k]!=="number" || !(t[k]>0)) t[k]=TASAS_DEF[k]; });
   if(!MONEDAS.includes(st.ajustes.monedaUltima)) st.ajustes.monedaUltima = "MXN";
+  if(!PAISES.includes(st.ajustes.paisActual)) st.ajustes.paisActual = "México";
+  REABIERTOS = 0;
   st.movs.forEach(m=>{
     if(typeof m.bolsa !== "boolean") m.bolsa = /\(bolsa del bloque\)/i.test(m.concepto||"");
     if(!Array.isArray(m.abonos)) m.abonos = [];
     if(m.nota == null) m.nota = "";
-    if(!m.bolsa){ m.fechaInicio=null; m.fechaFin=null; m.pais=m.pais||null; return; }
-    if(!m.fechaInicio) m.fechaInicio = m.fecha;
-    if(!m.fechaFin)    m.fechaFin    = finQuincena(m.fechaInicio);
     if(m.pais === undefined) m.pais = null;
-    // caso 3: bolsa confirmada antes de existir los abonos → un abono equivalente
-    if(m.estado==="confirmado" && !m.abonos.length && typeof m.montoReal==="number"){
-      m.abonos.push({ id:"mg-"+m.id, fecha:m.fecha, monto:m.montoReal,
-        moneda:m.moneda||null, montoLocal:(m.montoLocal==null?null:m.montoLocal),
-        concepto:"Confirmación previa" });
-      m.montoLocal = null;              // el detalle vive ahora en el abono
-      m.moneda = m.pais ? MON_PAIS[m.pais] : null;
+    if(typeof m.cerradoAMano !== "boolean") m.cerradoAMano = false;
+
+    if(m.estado==="confirmado" || m.estado==="pendiente"){   // viene de v1.x
+      const ej = ejercido(m);
+      if(m.estado==="confirmado"){
+        const mr = (typeof m.montoReal==="number") ? m.montoReal : m.montoPlan;
+        if(ej>0 && mr===ej){
+          m.cerradoAMano = true;                 // liquidación deliberada, se respeta
+        }else if(mr>ej){
+          m.abonos.push({ id:"mg-"+m.id, fecha:m.fecha, monto:mr-ej,
+            moneda:m.moneda||null, montoLocal:(m.montoLocal==null?null:m.montoLocal),
+            concepto:"Pago registrado antes" });
+          if(mr < m.montoPlan) REABIERTOS++;      // el caso de la renta
+        }
+      }
+      delete m.estado;                            // lo recalcula sync()
     }
+    sync(m);
   });
   return st;
 }
-
-let S;
-try{ S = JSON.parse(localStorage.getItem(KEY)) || nuevoEstado(); }catch(e){ S = nuevoEstado(); }
-if(!S || !S.ajustes || !Array.isArray(S.movs)) S = nuevoEstado();
-migrar(S);
-
-function guardar(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){ aviso("No se pudo guardar"); } }
 
 /* ---------------- utilidades ---------------- */
 const fmt = n => new Intl.NumberFormat("es-MX",{style:"currency",currency:"MXN",maximumFractionDigits:0}).format(n||0);
@@ -355,92 +369,84 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">"
 const orden = () => S.movs.slice().sort((a,b)=> a.fecha===b.fecha ? (signo(b)-signo(a)) : a.fecha.localeCompare(b.fecha));
 const quincena = iso => { const [y,m,d]=iso.split("-").map(Number); return y+"-"+String(m).padStart(2,"0")+"-Q"+(d<15?1:2); };
 const diaCorto = iso => new Intl.DateTimeFormat("es-MX",{day:"numeric",month:"short"}).format(aDate(iso));
-const tramoTxt = m => (m.fechaInicio&&m.fechaFin) ? diaCorto(m.fechaInicio)+" – "+diaCorto(m.fechaFin) : fechaLarga(m.fecha);
 
-/* ---- pagos por partes: ejercido = suma de abonos, siempre en MXN ---- */
-const ejercido  = m => (m.abonos||[]).reduce((a,x)=>a+(Number(x.monto)||0),0);
-const conAbonos = m => Array.isArray(m.abonos) && m.abonos.length>0;
-/* CUALQUIER movimiento con abonos usa la aritmética de partes; una bolsa la usa
-   siempre, aunque todavía no tenga abonos (su reserva ya está comprometida). */
-const porPartes = m => m.bolsa || conAbonos(m);
-const cubierto  = m => porPartes(m) && m.estado==="confirmado";
-const cerrado   = m => m.montoReal!=null ? m.montoReal : ejercido(m);
+/* =================== LOS TRES ESTADOS ===================
 
-/* real(m): dinero que YA se movió, seguro.
+   por_pagar → sin abonos
+   a_medias  → tiene abonos pero no cubren el plan
+   pagado    → los abonos cubren el plan, o se cerró a mano
+
+   `estado` se persiste (para que el respaldo sea legible) pero SIEMPRE lo
+   recalcula sync(). Nunca se asigna a mano desde la UI: así es imposible que
+   un movimiento a medias termine marcado como pagado, que es justo el bug
+   que originó esta versión.
+
+   El único registro de dinero movido son los abonos: no hay `montoReal`. Con
+   eso bolsas y gastos comparten una sola aritmética, sin una sola rama. */
+const ejercido = m => (m.abonos||[]).reduce((a,x)=>a+(Number(x.monto)||0),0);
+const esPagado = m => m.estado === "pagado";
+const aMedias  = m => m.estado === "a_medias";
+const abierto  = m => m.estado !== "pagado";
+const falta    = m => Math.max(0, m.montoPlan - ejercido(m));
+
+/* Recalcula el estado. Devuelve true si ACABA de quedar cubierto (para el aviso). */
+function sync(m){
+  if(!Array.isArray(m.abonos)) m.abonos = [];
+  const antes = m.estado, ej = ejercido(m);
+  m.estado = (m.cerradoAMano || (ej>0 && ej>=m.montoPlan)) ? "pagado"
+           : (ej>0 ? "a_medias" : "por_pagar");
+  return m.estado==="pagado" && antes!=="pagado";
+}
+
+/* real(m): dinero que YA se movió.
    proy(m): lo que sigue comprometido ADEMÁS de real(m).
-   Un movimiento pagado a medias aporta a los dos: lo abonado a real, lo que
-   falta a proy. Renta de 26,850 con un abono de 13,425 → real −13,425, proy −13,425. */
-const real = m => porPartes(m)
-  ? signo(m) * (cubierto(m) ? cerrado(m) : ejercido(m))
-  : (m.estado==="confirmado" ? signo(m)*(m.montoReal??m.montoPlan) : 0);
-const proy = m => porPartes(m)
-  ? (cubierto(m) ? 0 : signo(m)*Math.max(0, m.montoPlan - ejercido(m)))
-  : (m.estado==="pendiente" ? signo(m)*m.montoPlan : 0);
-/* efectivo = real + proy → −max(plan, ejercido) mientras siga abierto.
-   Con eso el saldo corrido de listaHTML sigue funcionando sin cambios. */
+   Un movimiento a medias aporta a los dos: lo abonado a real, lo que falta a
+   proy. Por eso abonar no mueve el proyectado: cada peso que sale de caja sale
+   también de lo comprometido. */
+const real     = m => signo(m) * ejercido(m);
+const proy     = m => esPagado(m) ? 0 : signo(m) * falta(m);
+/* efectivo = real + proy → −max(plan, ejercido) mientras siga abierto, que es
+   lo que necesita el saldo corrido de listaHTML. */
 const efectivo = m => real(m) + proy(m);
-/* magnitud realmente gastada/recibida (0 si es un pendiente sin abonos) */
+/* magnitud realmente gastada/recibida (0 si nadie ha pagado nada) */
 const gastoReal = m => Math.abs(real(m));
 
 /* Regla A: el sobregiro se reconoce en la desviación de inmediato;
    el ahorro sólo al cerrar. */
-const desvDe = m => porPartes(m)
-  ? (cubierto(m) ? signo(m)*(cerrado(m)-m.montoPlan)
-                 : -Math.max(0, ejercido(m)-m.montoPlan))
-  : (m.estado==="confirmado" ? signo(m)*((m.montoReal??m.montoPlan)-m.montoPlan) : 0);
+const desvDe = m => esPagado(m) ? signo(m)*(ejercido(m)-m.montoPlan)
+                                : -Math.max(0, ejercido(m)-m.montoPlan);
 
-/* Tras tocar los abonos de un movimiento normal: se cierra solo al quedar
-   cubierto y se vuelve a abrir si un abono se borra o se reduce.
-   Las bolsas NO: ahí el sobrante importa y se liquidan a mano. */
-function trasAbonar(m){
-  if(m.bolsa) return false;
-  const ej = ejercido(m);
-  if(m.estado==="pendiente"){
-    if(m.montoPlan>0 && ej>=m.montoPlan){
-      m.estado="confirmado"; m.montoReal=ej; m.moneda=null; m.montoLocal=null;
-      return true;
-    }
-    return false;
-  }
-  if(conAbonos(m)){
-    if(ej<m.montoPlan){ m.estado="pendiente"; m.montoReal=null; }
-    else m.montoReal=ej;
-  }
-  return false;
-}
-
-/* Resolutor de dos niveles. Devuelve {b, nivel} o null.
-     vigente  → fechaInicio ≤ hoy ≤ fechaFin, gana la de fechaInicio más reciente
-                (así un tramo envolvente como Souvenirs EUA cede ante el país en curso)
-     rezagada → ninguna cubre hoy: la abierta más reciente ya vencida
-     futura   → sólo quedan bolsas que aún no arrancan */
-function bolsaVigente(cat, hoy){
-  hoy = hoy || hoyISO();
-  const ab = S.movs.filter(m=>m.bolsa && m.categoria===cat && m.estado==="pendiente");
-  const porIni = (a,b)=>b.fechaInicio.localeCompare(a.fechaInicio);
-  const cubren = ab.filter(m=>m.fechaInicio<=hoy && hoy<=m.fechaFin).sort(porIni);
-  if(cubren.length) return {b:cubren[0], nivel:"vigente"};
-  const vencidas = ab.filter(m=>m.fechaInicio<=hoy).sort(porIni);
-  if(vencidas.length) return {b:vencidas[0], nivel:"rezagada"};
-  const futuras = ab.filter(m=>m.fechaInicio>hoy).sort((a,b)=>a.fechaInicio.localeCompare(b.fechaInicio));
-  if(futuras.length) return {b:futuras[0], nivel:"futura"};
-  return null;
-}
-/* bolsas abiertas cuyo tramo ya terminó → empujón de liquidación */
-const rezagadas = () => { const h=hoyISO();
-  return S.movs.filter(m=>m.bolsa && m.estado==="pendiente" && m.fechaFin && m.fechaFin<h)
-               .sort((a,b)=>a.fechaFin.localeCompare(b.fechaFin)); };
+/* Accesos rápidos: las bolsas abiertas del país seleccionado en Ajustes.
+   No hay resolutor: el país lo eliges tú al aterrizar y decide todo. Las fechas
+   no participan; si dos bolsas comparten país salen las dos, ordenadas por
+   fecha, sin desempates invisibles. */
+const paisActual  = () => S.ajustes.paisActual || "México";
+const monedaPais  = p => MON_PAIS[p || paisActual()] || "MXN";
+const bolsasDelPais = (p) => S.movs
+  .filter(m => m.bolsa && abierto(m) && m.pais === (p || paisActual()))
+  .sort((a,b) => a.fecha.localeCompare(b.fecha));
+/* lo que falta pagar, en una sola lista: por_pagar y a_medias juntos */
+const porPagar = () => orden().filter(m => abierto(m) && m.tipo==="gasto");
 
 function calc(){
-  const conf = S.movs.filter(m=>m.estado==="confirmado");
-  const pend = S.movs.filter(m=>m.estado==="pendiente");
   const saldoReal = S.ajustes.saldoInicial + S.movs.reduce((a,m)=>a+real(m),0);
   const saldoProy = saldoReal + S.movs.reduce((a,m)=>a+proy(m),0);
   const desv = S.movs.reduce((a,m)=>a+desvDe(m), 0);
-  return { conf, pend, saldoReal, saldoProy, desv,
+  return { saldoReal, saldoProy, desv,
+           pagados: S.movs.filter(esPagado).length,
+           abiertos: S.movs.filter(abierto).length,
            gastadoViaje: S.movs.filter(m=>m.tipo==="gasto"&&m.categoria!=="Hogar")
                                .reduce((a,m)=>a+gastoReal(m),0) };
 }
+
+/* ---------------- estado persistido ----------------
+   Se carga DESPUÉS de la aritmética porque migrar() usa ejercido() y sync(). */
+let S;
+try{ S = JSON.parse(localStorage.getItem(KEY)) || nuevoEstado(); }catch(e){ S = nuevoEstado(); }
+if(!S || !S.ajustes || !Array.isArray(S.movs)) S = nuevoEstado();
+migrar(S);
+
+function guardar(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){ aviso("No se pudo guardar"); } }
 
 function aviso(t){ const el=document.getElementById("toast"); el.textContent=t; el.classList.add("on"); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove("on"),1900); }
 
@@ -474,7 +480,8 @@ document.addEventListener("visibilitychange",()=>{
 
 function render(){
   document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.t===tab));
-  document.getElementById("fab").style.display = (tab==="inicio"||tab==="movs") ? "block" : "none";
+  // el FAB sólo en Movimientos: en Inicio ya está el botón grande de registrar gasto
+  document.getElementById("fab").style.display = (tab==="movs") ? "block" : "none";
   view.innerHTML = ({inicio:vInicio, movs:vMovs, resumen:vResumen, ajustes:vAjustes})[tab]();
   enlazar();
 }
@@ -495,50 +502,26 @@ const subsHTML = b => b.abonos.slice()
   .sort((x,y)=>x.fecha===y.fecha ? String(x.id).localeCompare(String(y.id)) : x.fecha.localeCompare(y.fecha))
   .map(a=>abonoHTML(b,a)).join("");
 
-function filaBolsaHTML(m, saldo){
-  const ej=ejercido(m), plan=m.montoPlan, liq=cubierto(m);
-  const disp = plan - ej;
-  const total = liq ? cerrado(m) : Math.max(plan, ej);
-  const pct = plan>0 ? Math.min(100, Math.round(ej/plan*100)) : (ej>0?100:0);
-  const n = m.abonos.length, exp = abiertos.has(m.id);
-  let sub = `${m.categoria} · ${fmt(ej)} de ${fmt(plan)}`;
-  if(disp<0) sub += " · sobregiro "+fmt(-disp);
-  else if(liq) sub += " · ahorro "+fmt(disp);
-  if(m.nota) sub += " · "+m.nota;
-  return `<div class="row bolsa ${liq?"ok":""}" data-id="${m.id}">
-    <div class="stub"></div><div class="hit" data-act="abrir"></div>
-    <div class="body">
-      <div class="t">${esc(m.concepto)}</div>
-      <div class="m">${esc(sub)}</div>
-      <div class="mini"><i style="width:${pct}%;background:${disp<0?"var(--red)":"var(--acc)"}"></i></div>
-      ${n?`<button class="expand" data-act="expand">${n} abono${n>1?"s":""} ${exp?"▴":"▾"}</button>`:""}
-    </div>
-    <div class="amt"><b class="${disp<0?"neg":""}">−${fmt(total).replace("-","")}</b>
-      <span class="num">${fmt(saldo)}</span></div>
-    <button class="tick" data-act="tick" aria-label="Abrir bolsa"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.2 5L20 6.5"/></svg></button>
-  </div>${(exp&&n)?`<div class="subs">${subsHTML(m)}</div>`:""}`;
-}
-
+/* UNA sola fila para todo: bolsas y gastos son lo mismo.
+   Toda la fila es tocable y abre hojaMov. No hay botón ✓ ni overlay parcial:
+   ese ✓ separado del cuerpo era la mitad de la confusión que causó el bug. */
 function filaHTML(m, saldo){
-  if(m.bolsa) return filaBolsaHTML(m, saldo);
-  const monto = m.estado==="confirmado" ? (m.montoReal??m.montoPlan) : m.montoPlan;
-  const dif = m.estado==="confirmado" ? signo(m)*(monto-m.montoPlan) : 0;
-  const cls = m.tipo==="ingreso" ? "pos" : "";
-  const parcial = conAbonos(m) && m.estado==="pendiente";
+  const ej=ejercido(m), plan=m.montoPlan, pag=esPagado(m), dif=ej-plan;
+  const total = pag ? ej : Math.max(plan, ej);
   const n = m.abonos ? m.abonos.length : 0, exp = abiertos.has(m.id);
+  const cls = m.tipo==="ingreso" ? "pos" : "";
   let sub = m.categoria;
-  // avance de pagos parciales: un renglón de texto, sin barra
-  if(parcial) sub += " · "+fmt(ejercido(m))+" de "+fmt(m.montoPlan);
-  else if(m.estado==="confirmado" && m.moneda && m.moneda!=="MXN" && m.montoLocal!=null) sub += " · "+m.montoLocal.toLocaleString("es-MX")+" "+m.moneda;
-  else if(m.estado==="confirmado" && dif!==0) sub += " · plan "+fmt(m.montoPlan);
-  if(m.nota) sub += " · "+m.nota;
-  return `<div class="row ${m.estado==="confirmado"?"ok":""}" data-id="${m.id}">
-    <div class="stub"></div><div class="hit" data-act="editar"></div>
+  if(aMedias(m))       sub += " · "+fmt(ej)+" de "+fmt(plan);   // el renglón clave
+  else if(pag && dif>0) sub += " · sobregiro "+fmt(dif);
+  else if(pag && dif<0) sub += " · ahorro "+fmt(-dif);
+  if(m.bolsa) sub += " · bolsa"+(m.pais?" "+m.pais:"");
+  if(m.nota)  sub += " · "+m.nota;
+  return `<div class="row ${pag?"ok":""} ${aMedias(m)?"medias":""}" data-id="${m.id}">
+    <div class="stub"></div><div class="hit" data-act="abrir"></div>
     <div class="body"><div class="t">${esc(m.concepto)}</div><div class="m">${esc(sub)}</div>
       ${n?`<button class="expand" data-act="expand">${n} abono${n>1?"s":""} ${exp?"▴":"▾"}</button>`:""}</div>
-    <div class="amt"><b class="${dif<0?"neg":cls}">${m.tipo==="ingreso"?"+":"−"}${fmt(monto).replace("-","")}</b>
+    <div class="amt"><b class="${dif>0&&pag?"neg":cls}">${m.tipo==="ingreso"?"+":"−"}${fmt(total).replace("-","")}</b>
       <span class="num">${fmt(saldo)}</span></div>
-    <button class="tick" data-act="tick" aria-label="Pagar"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.2 5L20 6.5"/></svg></button>
   </div>${(exp&&n)?`<div class="subs">${subsHTML(m)}</div>`:""}`;
 }
 
@@ -559,84 +542,81 @@ function listaHTML(movs){
   return out+"</div></div>";
 }
 
+/* Accesos rápidos del país seleccionado. Si estás en México y no hay bolsas
+   de México, el bloque simplemente no aparece. */
 function tarjetaRapido(){
-  const items = CATS_BOLSA.map(cat=>({cat, r:bolsaVigente(cat)})).filter(x=>x.r);
-  if(!items.length) return "";
+  const bs = bolsasDelPais();
+  if(!bs.length) return "";
   return `<div class="card">
-    <div class="eyebrow" style="margin-bottom:10px">Gasto rápido</div>
-    <div class="qk">${items.map(x=>{
-      const m=x.r.b, disp=m.montoPlan-ejercido(m), fuera=x.r.nivel!=="vigente";
-      return `<button data-qk="${m.id}" class="${fuera?"off":""}">
-        <span class="qe">${EMOJI[x.cat]||"💸"}</span>
-        <span class="qn">${x.cat}</span>
-        <span class="qv" style="${disp<0?"color:var(--red)":""}">${fmt(disp)}</span>
+    <div class="eyebrow" style="margin-bottom:10px">Abonar en ${esc(paisActual())}</div>
+    <div class="qk">${bs.map(m=>{
+      const disp = falta(m);
+      return `<button data-qk="${m.id}">
+        <span class="qe">${EMOJI[m.categoria]||"💸"}</span>
+        <span class="qn">${esc(m.categoria)}</span>
+        <span class="qv" style="${ejercido(m)>m.montoPlan?"color:var(--red)":""}">${fmt(disp)}</span>
       </button>`;}).join("")}</div>
   </div>`;
 }
 
-function tarjetaRezagadas(){
-  const rz = rezagadas();
-  if(!rz.length) return "";
+/* "Me falta pagar": por_pagar y a_medias juntos, ordenados por fecha.
+   Es la lista de trabajo, no un filtro. Un a_medias JAMÁS falta aquí. */
+function tarjetaFalta(){
+  const ms = porPagar();
+  if(!ms.length) return `<div class="card"><div class="empty">Todo pagado. Nada pendiente.</div></div>`;
   return `<div class="card">
-    <div class="eyebrow" style="margin-bottom:2px">Bolsas por liquidar</div>
-    <div class="cap" style="font-size:12px;color:var(--muted);margin-bottom:6px">Su tramo ya terminó. Al liquidar, lo no gastado regresa a tu saldo.</div>
-    ${rz.map(m=>{ const d=m.montoPlan-ejercido(m);
-      return `<button class="nrow" data-liq="${m.id}">
-        <span><span class="nt">${esc(m.concepto)}</span><span class="ns">${tramoTxt(m)} · ${m.abonos.length} abono${m.abonos.length===1?"":"s"}</span></span>
-        <span class="num ${d<0?"neg":"pos"}" style="font-weight:600">${fmtS(d)}</span>
-      </button>`; }).join("")}
+    <div class="eyebrow" style="margin-bottom:10px">Me falta pagar</div>
+    ${ms.slice(0,12).map(m=>`<button class="nrow" data-mov="${m.id}">
+      <span><span class="nt">${esc(m.concepto)}</span>
+        <span class="ns">${diaCorto(m.fecha)} · ${esc(m.categoria)}${aMedias(m)?" · a medias":""}</span></span>
+      <span class="num" style="font-weight:600;white-space:nowrap">${
+        aMedias(m) ? fmt(ejercido(m))+" <span style=\"color:var(--muted);font-weight:400\">de "+fmt(m.montoPlan)+"</span>"
+                   : fmt(m.montoPlan)}</span>
+    </button>`).join("")}
+    ${ms.length>12?`<div class="ns" style="text-align:center;padding-top:10px;color:var(--muted)">y ${ms.length-12} más en Movimientos</div>`:""}
   </div>`;
 }
 
 function vInicio(){
-  const c=calc(), hoy=hoyISO();
-  const lim=new Date(aDate(hoy).getTime()+3*864e5);
-  const atrasados = S.movs.filter(m=>m.estado==="pendiente" && m.fecha<hoy);
-  let prox = orden().filter(m=> (m.estado==="pendiente" && aDate(m.fecha)<=lim) || (m.fecha>=hoy && aDate(m.fecha)<=lim) );
-  let titulo = atrasados.length ? "Sin confirmar y próximos días" : "Hoy y próximos 3 días";
-  if(!prox.length){
-    const sig = orden().filter(m=>m.estado==="pendiente")[0];
-    prox = sig?[sig]:[]; titulo="Siguiente movimiento";
-  }
-  const total=S.movs.length, hechos=c.conf.length;
+  const c=calc();
   const dcls = c.desv<0?"neg":(c.desv>0?"pos":"");
   return `
   <div class="card hero">
-    <div class="eyebrow">Saldo real ahora</div>
+    <div class="eyebrow">Saldo real</div>
     <div class="big num">${fmt(c.saldoReal)}</div>
-    <div class="note">${hechos} de ${total} movimientos confirmados${atrasados.length?` · <b class="warn">${atrasados.length} sin confirmar</b>`:""}</div>
-    <div class="bar"><i style="width:${total?Math.round(hechos/total*100):0}%"></i></div>
     <div class="split">
-      <div><div class="eyebrow">Proyectado al cierre</div><div class="v num">${fmt(c.saldoProy)}</div></div>
+      <div><div class="eyebrow">Disponible tras compromisos</div><div class="v num">${fmt(c.saldoProy)}</div></div>
       <div><div class="eyebrow">Desviación vs. plan</div><div class="v num ${dcls}">${fmtS(c.desv)}</div></div>
     </div>
   </div>
   ${tarjetaRapido()}
-  ${tarjetaRezagadas()}
-  <div class="eyebrow" style="padding:4px 4px 8px">${titulo}</div>
-  ${listaHTML(prox)}`;
+  <button class="btn grande" id="reg">＋&nbsp; Registrar gasto</button>
+  ${tarjetaFalta()}`;
 }
 
-let filtro="pendiente";
+/* [Me falta pagar] [Pagado] [Todo] — el primero por defecto e incluye a_medias */
+let filtro="falta";
+const FILTROS = [["falta","Me falta pagar"],["pagado","Pagado"],["todo","Todo"]];
 function vMovs(){
-  const movs = orden().filter(m=> filtro==="todos" ? true : m.estado===filtro );
+  const movs = orden().filter(m => filtro==="todo" ? true
+                                 : filtro==="pagado" ? esPagado(m) : abierto(m));
   return `<div class="chips">
-      <button class="chip ${filtro==="pendiente"?"on":""}" data-f="pendiente">Pendientes</button>
-      <button class="chip ${filtro==="confirmado"?"on":""}" data-f="confirmado">Confirmados</button>
-      <button class="chip ${filtro==="todos"?"on":""}" data-f="todos">Todos</button>
+      ${FILTROS.map(([k,t])=>`<button class="chip ${filtro===k?"on":""}" data-f="${k}">${t}</button>`).join("")}
     </div>${listaHTML(movs)}`;
 }
 
 function vResumen(){
   const c=calc();
+  // una sola tabla: planeado / pagado / falta. Las bolsas ya no son un caso aparte.
   const cats = CATS.map(cat=>{
     const ms=S.movs.filter(m=>m.categoria===cat && m.tipo==="gasto");
     return {cat,
       plan: ms.reduce((a,m)=>a+m.montoPlan,0),
-      // parche: gastoReal incluye el ejercido de las bolsas abiertas, no sólo confirmados
-      real: ms.reduce((a,m)=>a+gastoReal(m),0)};
-  }).filter(x=>x.plan>0).sort((a,b)=>b.plan-a.plan);
+      real: ms.reduce((a,m)=>a+gastoReal(m),0),
+      falta: ms.reduce((a,m)=>a+falta(m)*(esPagado(m)?0:1),0)};
+  }).filter(x=>x.plan>0 || x.real>0).sort((a,b)=>b.plan-a.plan);
   const maxc = Math.max(...cats.map(x=>x.plan),1);
+  const totC = cats.reduce((a,x)=>({p:a.p+x.plan, r:a.r+x.real, f:a.f+x.falta}), {p:0,r:0,f:0});
 
   const qs=[...new Set(orden().map(m=>quincena(m.fecha)))];
   let s=S.ajustes.saldoInicial;
@@ -651,35 +631,16 @@ function vResumen(){
     return `<tr><td>${et} ${qq==="Q1"?"1–14":"15–fin"}</td><td class="num pos">${fmt(ing)}</td><td class="num">${fmt(gas)}</td><td class="num"><b>${fmt(s)}</b></td></tr>`;
   }).join("");
 
-  const bols = orden().filter(m=>m.bolsa);
-  const tot = bols.reduce((a,m)=>({r:a.r+m.montoPlan, e:a.e+gastoReal(m)}), {r:0,e:0});
-  const tarjetaBolsas = !bols.length ? "" : `
-  <div class="card">
-    <div class="eyebrow" style="margin-bottom:12px">Bolsas · reservado vs. ejercido</div>
-    <table class="tbl"><thead><tr><th>Bolsa</th><th>Reservado</th><th>Ejercido</th><th>Disponible</th></tr></thead><tbody>
-    ${bols.map(m=>{
-      const ej=gastoReal(m), disp=m.montoPlan-ej, liq=cubierto(m);
-      const pct=m.montoPlan>0?Math.min(100,Math.round(ej/m.montoPlan*100)):(ej>0?100:0);
-      return `<tr><td style="${liq?"color:var(--muted)":""}">${esc(m.concepto)}${liq?" ✓":""}
-          <div class="ns" style="font-size:10px;color:var(--muted)">${tramoTxt(m)}</div>
-          <div class="mini"><i style="width:${pct}%;background:${disp<0?"var(--red)":"var(--acc)"}"></i></div></td>
-        <td class="num" style="color:var(--muted)">${fmt(m.montoPlan)}</td>
-        <td class="num">${fmt(ej)}</td>
-        <td class="num ${disp<0?"neg":"pos"}"><b>${fmt(disp)}</b></td></tr>`;
-    }).join("")}
-    <tr><td><b>Total</b></td><td class="num" style="color:var(--muted)">${fmt(tot.r)}</td>
-      <td class="num">${fmt(tot.e)}</td>
-      <td class="num ${tot.r-tot.e<0?"neg":"pos"}"><b>${fmt(tot.r-tot.e)}</b></td></tr>
-    </tbody></table>
-  </div>`;
-
   return `
-  ${tarjetaBolsas}
   <div class="card">
-    <div class="eyebrow" style="margin-bottom:12px">Gasto por categoría · real vs. plan</div>
-    <table class="tbl"><thead><tr><th>Categoría</th><th>Ejercido</th><th>Plan</th></tr></thead><tbody>
-    ${cats.map(x=>`<tr><td>${x.cat}<div class="mini"><i style="width:${Math.round(x.plan/maxc*100)}%;background:${x.real>x.plan?"var(--red)":"var(--acc)"};opacity:.35"></i></div></td>
-      <td class="num ${x.real>x.plan?"neg":""}">${fmt(x.real)}</td><td class="num" style="color:var(--muted)">${fmt(x.plan)}</td></tr>`).join("")}
+    <div class="eyebrow" style="margin-bottom:12px">Gasto por categoría</div>
+    <table class="tbl"><thead><tr><th>Categoría</th><th>Planeado</th><th>Pagado</th><th>Falta</th></tr></thead><tbody>
+    ${cats.map(x=>`<tr><td>${esc(x.cat)}<div class="mini"><i style="width:${Math.round(x.plan/maxc*100)}%;background:${x.real>x.plan?"var(--red)":"var(--acc)"};opacity:.35"></i></div></td>
+      <td class="num" style="color:var(--muted)">${fmt(x.plan)}</td>
+      <td class="num ${x.real>x.plan?"neg":""}">${fmt(x.real)}</td>
+      <td class="num">${fmt(x.falta)}</td></tr>`).join("")}
+    <tr><td><b>Total</b></td><td class="num" style="color:var(--muted)">${fmt(totC.p)}</td>
+      <td class="num"><b>${fmt(totC.r)}</b></td><td class="num"><b>${fmt(totC.f)}</b></td></tr>
     </tbody></table>
   </div>
   <div class="card">
@@ -689,9 +650,9 @@ function vResumen(){
   <div class="card">
     <div class="eyebrow" style="margin-bottom:10px">Viaje</div>
     <table class="tbl"><tbody>
-      <tr><td>Gastado en el viaje (confirmado)</td><td class="num">${fmt(c.gastadoViaje)}</td></tr>
-      <tr><td>Movimientos pendientes</td><td class="num">${c.pend.length}</td></tr>
-      <tr><td>Saldo proyectado al cierre</td><td class="num"><b>${fmt(c.saldoProy)}</b></td></tr>
+      <tr><td>Gastado en el viaje</td><td class="num">${fmt(c.gastadoViaje)}</td></tr>
+      <tr><td>Movimientos por pagar</td><td class="num">${c.abiertos}</td></tr>
+      <tr><td>Disponible tras compromisos</td><td class="num"><b>${fmt(c.saldoProy)}</b></td></tr>
     </tbody></table>
   </div>`;
 }
@@ -699,6 +660,13 @@ function vResumen(){
 function vAjustes(){
   const t=S.ajustes.tasas;
   return `
+  <div class="card">
+    <div class="eyebrow" style="margin-bottom:4px">País actual</div>
+    <div class="cap" style="font-size:12px;color:var(--muted);margin-bottom:10px">Cámbialo al aterrizar. Decide qué bolsas salen en Inicio y qué moneda se preselecciona al capturar.</div>
+    <div class="chips wrap" id="paises" style="margin-bottom:0">
+      ${PAISES.map(p=>`<button class="chip ${p===paisActual()?"on":""}" data-pais="${esc(p)}">${esc(p)} · ${MON_PAIS[p]}</button>`).join("")}
+    </div>
+  </div>
   <div class="card">
     <div class="eyebrow" style="margin-bottom:12px">Saldo inicial</div>
     <label><span class="lb">Efectivo con el que arrancaste</span>
@@ -714,9 +682,9 @@ function vAjustes(){
     <button class="btn" id="gtasas">Guardar tipos de cambio</button>
   </div>
   <div class="card">
-    <div class="eyebrow" style="margin-bottom:4px">Bolsas de Souvenirs</div>
-    <div class="cap" style="font-size:12px;color:var(--muted);margin-bottom:12px">Una bolsa por tramo de país. Puedes cambiar montos y fechas antes de crearlas, y después desde cada bolsa.</div>
-    <button class="btn ghost" id="souv">Crear o revisar bolsas de Souvenirs</button>
+    <div class="eyebrow" style="margin-bottom:4px">Bolsas y país</div>
+    <div class="cap" style="font-size:12px;color:var(--muted);margin-bottom:12px">Una bolsa es un movimiento normal que además sale en los accesos rápidos de su país. Aquí les asignas país o creas las de Souvenirs.</div>
+    <button class="btn ghost" id="souv">Administrar bolsas</button>
   </div>
   <div class="card">
     <div class="eyebrow" style="margin-bottom:4px">Respaldo</div>
@@ -727,91 +695,35 @@ function vAjustes(){
       <button class="btn danger" id="reset">Volver al plan original</button>
     </div>
   </div>
-  <div style="text-align:center;font-size:11px;color:var(--muted);padding:2px 0 10px">Asia 2026 · v1.3 · datos sólo en este dispositivo</div>`;
+  <div style="text-align:center;font-size:11px;color:var(--muted);padding:2px 0 10px">Asia 2026 · v2.0 · datos sólo en este dispositivo</div>`;
 }
 
 /* ---------------- acciones ---------------- */
-function hojaConfirmar(m){
-  const plan=m.montoPlan, ya=m.estado==="confirmado";
-  abrir(`
-    <h2>${esc(m.concepto)}</h2>
-    <div class="cap">${fechaLarga(m.fecha)} · plan ${fmt(plan)}</div>
-    <div class="chips" id="mons">${MONEDAS.map(x=>`<button class="chip ${x===(m.moneda||"MXN")?"on":""}" data-mon="${x}">${x}</button>`).join("")}</div>
-    <input class="big" type="number" inputmode="decimal" id="mreal" value="${ya?(m.moneda&&m.moneda!=="MXN"?m.montoLocal:m.montoReal):plan}">
-    <div class="conv" id="conv"></div>
-    <div class="acts">
-      <button class="btn" id="ok">${ya?"Guardar cambios":"Pagar todo "+fmt(plan)}</button>
-      ${ya?"":`<button class="btn ghost" id="parte">Abonar una parte</button>`}
-      ${ya?`<button class="btn ghost" id="undo">Marcar como pendiente</button>`:""}
-      <button class="btn ghost" id="cx">Cancelar</button>
-    </div>`);
-  let mon = m.moneda||"MXN";
-  const inp=document.getElementById("mreal"), conv=document.getElementById("conv");
-  const btnOk=document.getElementById("ok");
-  const pinta=()=>{
-    const v=parseFloat(inp.value)||0, mxn=mon==="MXN"?v:Math.round(v*S.ajustes.tasas[mon]);
-    conv.textContent = mon==="MXN" ? "Pesos mexicanos" : `= ${fmt(mxn)} · tipo de cambio ${S.ajustes.tasas[mon]}`;
-    if(!ya) btnOk.textContent = (mxn===plan ? "Pagar todo " : "Pagar ") + fmt(mxn);
-  };
-  document.getElementById("mons").onclick=e=>{
-    const b=e.target.closest("[data-mon]"); if(!b) return;
-    const antes=mon; mon=b.dataset.mon;
-    // convertir el valor mostrado a la nueva moneda para no guardar unidades equivocadas
-    const v=parseFloat(inp.value);
-    if(!isNaN(v) && antes!==mon){
-      const mxn = antes==="MXN" ? v : v*S.ajustes.tasas[antes];
-      const nv = mon==="MXN" ? mxn : mxn/S.ajustes.tasas[mon];
-      inp.value = mon==="MXN" ? Math.round(mxn) : Math.round(nv);
-    }
-    document.querySelectorAll("#mons .chip").forEach(c=>c.classList.toggle("on",c.dataset.mon===mon));
-    pinta();
-  };
-  inp.oninput=pinta; pinta();
-  inp.focus(); inp.select();
-  document.getElementById("ok").onclick=()=>{
-    const v=parseFloat(inp.value); if(isNaN(v)||v<0) return aviso("Escribe un monto válido");
-    m.montoReal = mon==="MXN" ? v : Math.round(v*S.ajustes.tasas[mon]);
-    m.moneda=mon; m.montoLocal = mon==="MXN"?null:v; m.estado="confirmado";
-    guardar(); cerrar(); render(); aviso("Confirmado");
-  };
-  document.getElementById("cx").onclick=cerrar;
-  if(!ya) document.getElementById("parte").onclick=()=>hojaAbono(m,null,false);
-  if(ya) document.getElementById("undo").onclick=()=>{
-    m.estado="pendiente"; m.montoReal=null; m.moneda=null; m.montoLocal=null;
-    guardar(); cerrar(); render(); aviso("De vuelta a pendiente");
-  };
-}
-
 const chipsMonedaHTML = sel =>
   `<div class="chips" id="mons">${MONEDAS.map(x=>`<button class="chip ${x===sel?"on":""}" data-mon="${x}">${x}</button>`).join("")}</div>`;
 
-/* Abonar a CUALQUIER movimiento. En su forma mínima pide sólo el monto:
-   moneda, fecha y nota son enlaces discretos debajo del botón, no campos.
-   Las bolsas mantienen la forma rica (atajos de monto; chips visibles si hay país). */
-function hojaAbono(b, ab, volver){
+/* Abonar a CUALQUIER movimiento. Pide UNA sola cosa: el monto.
+   Moneda, fecha y nota son enlaces discretos debajo del botón, no campos.
+   `pre` precarga un monto en MXN (lo usa "Pagar el resto"). */
+function hojaAbono(b, ab, volver, pre){
   const nuevo = !ab;
   const hoy = hoyISO();
-  const conPais = !!b.pais;              // Souvenirs: la moneda del tramo se ve
   const conAtajos = !!b.bolsa;           // captura de calle: montos frecuentes
-  const fuera = b.bolsa && !(b.fechaInicio && b.fechaFin && b.fechaInicio<=hoy && hoy<=b.fechaFin);
   ab = ab || {id:"a"+Date.now().toString(36)+Math.floor(Math.random()*46656).toString(36),
               fecha:hoy, monto:0, moneda:null, montoLocal:null, concepto:""};
-  let mon = nuevo
-    ? (conPais ? (MON_PAIS[b.pais]||"MXN")
-               : (b.bolsa ? (S.ajustes.monedaUltima||"MXN") : "MXN"))
-    : (ab.moneda||"MXN");
+  /* La moneda por defecto sale del país actual, salvo al editar un abono ya
+     capturado, que conserva la suya. Un monto precargado va siempre en MXN. */
+  let mon = !nuevo ? (ab.moneda||"MXN") : (pre!=null ? "MXN" : monedaPais());
   if(!MONEDAS.includes(mon)) mon="MXN";
-  const valIni = nuevo ? "" : (mon==="MXN" ? ab.monto : ab.montoLocal);
+  const valIni = nuevo ? (pre!=null ? pre : "") : (mon==="MXN" ? ab.monto : ab.montoLocal);
   // en edición se despliega lo que ya trae valor propio
-  let verMon = conPais || (!nuevo && mon!=="MXN");
+  let verMon = (!nuevo && mon!=="MXN") || (nuevo && mon!=="MXN");
   let verFec = !nuevo && ab.fecha!==hoy;
   let verCon = !nuevo && !!ab.concepto;
   const ej0 = ejercido(b);
-  const cap = b.bolsa
-    ? `${esc(b.concepto)} · ${tramoTxt(b)} · quedan ${fmt(b.montoPlan-ej0)}${fuera?` · <b class="warn">fuera de tramo</b>`:""}`
-    : `llevas ${fmt(ej0)} de ${fmt(b.montoPlan)}`;
+  const cap = `llevas ${fmt(ej0)} de ${fmt(b.montoPlan)} · faltan ${fmt(falta(b))}`;
   abrir(`
-    <h2>${nuevo?"Abonar a "+esc(b.bolsa?b.categoria:b.concepto):"Editar abono"}</h2>
+    <h2>${nuevo?(pre!=null?"Pagar el resto de ":"Abonar a ")+esc(b.concepto):"Editar abono"}</h2>
     <div class="cap">${cap}</div>
     <div id="a-monwrap" style="display:${verMon?"block":"none"}">${chipsMonedaHTML(mon)}</div>
     <input class="big" type="number" inputmode="decimal" id="a-mon" value="${valIni==null?"":valIni}" placeholder="0">
@@ -869,98 +781,177 @@ function hojaAbono(b, ab, volver){
     ab.concepto = conIn.value.trim();
     ab.fecha = fecIn.value || hoy;
     if(nuevo) b.abonos.push(ab);
-    if(mon!=="MXN" || b.bolsa) S.ajustes.monedaUltima = mon;
-    const cubre = trasAbonar(b);        // los movimientos normales se cierran solos
+    if(mon!=="MXN") S.ajustes.monedaUltima = mon;
+    const cubre = sync(b);              // el estado SIEMPRE se recalcula, nunca se asigna
     guardar(); render();
     const cuanto = mon==="MXN" ? fmt(ab.monto) : v.toLocaleString("es-MX")+" "+mon;
-    aviso(cubre ? b.concepto+" cubierta"     // aviso() usa textContent, no escapar aquí
-                : `Abonado ${cuanto} · quedan ${fmt(Math.max(0,b.montoPlan-ejercido(b)))}`);
-    if(cubre) cerrar(); else if(volver) hojaBolsa(b); else cerrar();
+    aviso(cubre ? b.concepto+" quedó pagado"  // aviso() usa textContent, no escapar aquí
+                : `Abonado ${cuanto} · faltan ${fmt(falta(b))}`);
+    if(cubre) cerrar(); else if(volver) hojaMov(b); else cerrar();
   };
   if(!nuevo) document.getElementById("a-del").onclick=()=>{
     b.abonos = b.abonos.filter(x=>x.id!==ab.id);
-    trasAbonar(b);
+    sync(b);                            // borrar un abono puede reabrir el movimiento
     guardar(); render(); aviso("Abono eliminado");
-    if(volver) hojaBolsa(b); else cerrar();
+    if(volver) hojaMov(b); else cerrar();
   };
-  document.getElementById("a-cx").onclick=()=>{ if(volver) hojaBolsa(b); else cerrar(); };
+  document.getElementById("a-cx").onclick=()=>{ if(volver) hojaMov(b); else cerrar(); };
 }
 
-/* Hoja de pagos. Para una bolsa habla de reserva y liquidación; para un
-   movimiento normal con abonos, de plan y saldo pendiente. */
-function hojaBolsa(m){
-  const ej=ejercido(m), plan=m.montoPlan, disp=plan-ej, liq=cubierto(m), es=m.bolsa;
+/* LA hoja. Un toque en cualquier fila abre ésta y aquí se hace todo:
+   ver lo pagado y lo que falta, abonar, pagar el resto, cerrar, editar, borrar.
+   No hay una hoja para bolsas y otra para gastos: es la misma. */
+function hojaMov(m){
+  const ej=ejercido(m), plan=m.montoPlan, fal=falta(m), pag=esPagado(m), dif=ej-plan;
   const pct = plan>0 ? Math.min(100, Math.round(ej/plan*100)) : (ej>0?100:0);
+  const etiqueta = pag ? (dif>0 ? "sobregiro "+fmt(dif) : dif<0 ? "ahorro "+fmt(-dif) : "pagado")
+                       : (ej>0 ? "a medias" : "por pagar");
   abrir(`
     <h2>${esc(m.concepto)}</h2>
-    <div class="cap">${es?tramoTxt(m)+(m.pais?" · "+esc(m.pais):"")+(liq?" · liquidada":"")
-                       :fechaLarga(m.fecha)+(liq?" · cubierto":"")}</div>
+    <div class="cap">${fechaLarga(m.fecha)} · ${esc(m.categoria)}${m.bolsa?" · bolsa"+(m.pais?" "+esc(m.pais):""):""} · ${etiqueta}</div>
     <div class="stats">
-      <div><div class="eyebrow">${es?"Reservado":"Planeado"}</div><div class="v num">${fmt(plan)}</div></div>
-      <div><div class="eyebrow">${es?"Ejercido":"Pagado"}</div><div class="v num">${fmt(ej)}</div></div>
-      <div><div class="eyebrow">${es?"Disponible":"Falta"}</div><div class="v num ${disp<0?"neg":"pos"}">${fmt(disp)}</div></div>
+      <div><div class="eyebrow">Planeado</div><div class="v num">${fmt(plan)}</div></div>
+      <div><div class="eyebrow">Pagado</div><div class="v num">${fmt(ej)}</div></div>
+      <div><div class="eyebrow">Falta</div><div class="v num ${dif>0?"neg":"pos"}">${fmt(pag?0:fal)}</div></div>
     </div>
-    <div class="bar" style="margin-bottom:16px"><i style="width:${pct}%;${disp<0?"background:var(--red)":""}"></i></div>
+    <div class="bar" style="margin-bottom:16px"><i style="width:${pct}%;${dif>0?"background:var(--red)":""}"></i></div>
     ${m.abonos.length ? `<div class="rows" style="margin-bottom:16px">${subsHTML(m)}</div>`
-                      : `<div class="empty" style="padding:12px 10px">Sin abonos todavía.</div>`}
+                      : `<div class="empty" style="padding:12px 10px">Sin pagos todavía.</div>`}
     <div class="acts">
-      ${liq?"":`<button class="btn" id="b-ab">${es?"+ Abonar gasto":"+ Abonar pago"}</button>`}
-      ${es ? (liq?`<button class="btn ghost" id="b-re">Reabrir bolsa</button>`
-                 :`<button class="btn ghost" id="b-liq">Liquidar bolsa (${fmtS(disp)})</button>`)
-           : (liq?`<button class="btn ghost" id="b-re">Marcar como pendiente</button>`:"")}
-      <button class="btn ghost" id="b-ed">${es?"Editar plan de la bolsa":"Editar movimiento"}</button>
-      <button class="btn ghost" id="b-cx">Cerrar</button>
+      ${pag?"":`<button class="btn" id="b-ab">＋ Abonar</button>`}
+      ${(!pag && fal>0)?`<button class="btn ghost" id="b-resto">Pagar el resto · ${fmt(fal)}</button>`:""}
+      ${(!pag && ej>0)?`<button class="btn ghost" id="b-cerrar">Cerrar ya · libera ${fmt(fal)}</button>`:""}
+      ${(!pag && ej===0)?`<button class="btn ghost" id="b-cerrar">Cerrar sin pagar nada</button>`:""}
+      ${pag?`<button class="btn ghost" id="b-re">Reabrir</button>`:""}
+      <button class="btn ghost" id="b-ed">Editar</button>
+      <button class="btn ghost" id="b-cx">Cerrar hoja</button>
     </div>`);
   sheet.querySelectorAll(".sub").forEach(s=>s.onclick=()=>{
     const a=m.abonos.find(x=>String(x.id)===s.dataset.aid); if(a) hojaAbono(m,a,true);
   });
-  if(!liq){
+  if(!pag){
     document.getElementById("b-ab").onclick=()=>hojaAbono(m,null,true);
-    if(es){
-      const bl=document.getElementById("b-liq");
-      let armado = ej>0;   // liquidar en cero pide una segunda confirmación
-      bl.onclick=()=>{
-        if(!armado){ armado=true; bl.textContent="Confirmar: liquidar sin gastar nada"; bl.classList.add("danger"); return; }
-        m.estado="confirmado"; m.montoReal=ej; m.montoLocal=null;
-        guardar(); cerrar(); render();
-        aviso(disp>=0 ? "Liquidada · ahorro "+fmt(disp) : "Liquidada · sobregiro "+fmt(-disp));
-      };
-    }
+    const resto=document.getElementById("b-resto");
+    if(resto) resto.onclick=()=>hojaAbono(m,null,true,fal);   // abono precargado, un solo mecanismo
+    const bc=document.getElementById("b-cerrar");
+    let armado = ej>0;   // cerrar sin haber pagado nada pide segundo toque
+    bc.onclick=()=>{
+      if(!armado){ armado=true; bc.textContent="Confirmar: cerrar sin pagar nada"; bc.classList.add("danger"); return; }
+      m.cerradoAMano = true; sync(m);
+      guardar(); cerrar(); render();
+      aviso(fal>0 ? "Cerrado · libera "+fmt(fal) : "Cerrado");
+    };
   }else{
     document.getElementById("b-re").onclick=()=>{
-      m.estado="pendiente"; m.montoReal=null;
-      guardar(); cerrar(); render(); aviso(es?"Bolsa reabierta":"De vuelta a pendiente");
+      m.cerradoAMano = false; sync(m);
+      guardar(); cerrar(); render();
+      aviso(esPagado(m) ? "Sigue pagado: los abonos cubren el plan" : "Reabierto");
     };
   }
   document.getElementById("b-ed").onclick=()=>hojaEditar(m);
   document.getElementById("b-cx").onclick=cerrar;
 }
 
+/* Registrar un gasto NO planeado: monto → categoría → Guardar.
+   Nace pagado, con la fecha de hoy y la moneda del país actual. */
+function hojaRapido(){
+  const hoy = hoyISO();
+  let mon = monedaPais();
+  const cats = CATS.filter(c=>c!=="Ingreso");
+  abrir(`
+    <h2>Registrar gasto</h2>
+    <div class="cap">Lo no planeado. Se guarda pagado, con fecha de hoy.</div>
+    <div id="g-monwrap" style="display:${mon!=="MXN"?"block":"none"}">${chipsMonedaHTML(mon)}</div>
+    <input class="big" type="number" inputmode="decimal" id="g-mon" placeholder="0">
+    <div class="conv" id="g-conv"></div>
+    <div class="atajos" id="g-at"></div>
+    <label><span class="lb">Categoría</span>
+      <select id="g-cat">${cats.map(c=>`<option ${c==="Comida"?"selected":""}>${esc(c)}</option>`).join("")}</select></label>
+    <div class="acts"><button class="btn" id="g-ok">Guardar</button></div>
+    <div class="opts">
+      <button type="button" id="g-omon">${mon} ▾</button>
+      <button type="button" id="g-ocon">+ concepto</button>
+    </div>
+    <div id="g-conwrap" style="display:none">
+      <label style="margin-top:10px"><span class="lb">Concepto (opcional)</span>
+        <input id="g-con" placeholder="Ramen en Shinjuku"></label></div>
+    <div class="acts" style="margin-top:14px"><button class="btn ghost" id="g-cx">Cancelar</button></div>`);
+  const inp=document.getElementById("g-mon"), conv=document.getElementById("g-conv");
+  const at=document.getElementById("g-at"), conIn=document.getElementById("g-con");
+  const enMXN = () => { const v=parseFloat(inp.value)||0; return mon==="MXN" ? Math.round(v) : Math.round(v*S.ajustes.tasas[mon]); };
+  const pinta = () => {
+    conv.textContent = mon==="MXN" ? "" : `= ${fmt(enMXN())} · tipo de cambio ${S.ajustes.tasas[mon]}`;
+    document.getElementById("g-omon").textContent = mon+" ▾";
+    at.innerHTML = (ATAJOS[mon]||[]).map(n=>`<button type="button" data-at="${n}">${n.toLocaleString("es-MX")}</button>`).join("");
+    at.querySelectorAll("[data-at]").forEach(x=>x.onclick=()=>{ inp.value=x.dataset.at; pinta(); });
+  };
+  document.getElementById("g-omon").onclick=()=>{
+    const w=document.getElementById("g-monwrap");
+    w.style.display = w.style.display==="none" ? "block" : "none";
+  };
+  document.getElementById("g-ocon").onclick=()=>{
+    const w=document.getElementById("g-conwrap");
+    w.style.display = w.style.display==="none" ? "block" : "none";
+    if(w.style.display==="block") conIn.focus();
+  };
+  document.getElementById("mons").onclick=e=>{
+    const t=e.target.closest("[data-mon]"); if(!t) return;
+    const antes=mon; mon=t.dataset.mon;
+    const v=parseFloat(inp.value);
+    if(!isNaN(v) && antes!==mon){
+      const mxn = antes==="MXN" ? v : v*S.ajustes.tasas[antes];
+      inp.value = mon==="MXN" ? Math.round(mxn) : Math.round(mxn/S.ajustes.tasas[mon]);
+    }
+    document.querySelectorAll("#mons .chip").forEach(c=>c.classList.toggle("on",c.dataset.mon===mon));
+    pinta();
+  };
+  inp.oninput=pinta; pinta(); inp.focus();
+  document.getElementById("g-ok").onclick=()=>{
+    const v=parseFloat(inp.value);
+    if(isNaN(v)||v<=0) return aviso("Escribe un monto válido");
+    const mxn = enMXN();
+    const cat = document.getElementById("g-cat").value;
+    const con = conIn.value.trim() || cat;
+    const m = { id:"g"+Date.now().toString(36), fecha:hoy, concepto:con, categoria:cat,
+      tipo:"gasto", montoPlan:mxn, estado:"por_pagar", cerradoAMano:false, nota:"",
+      bolsa:false, pais:null, fechaInicio:null, fechaFin:null,
+      abonos:[{ id:"a"+Date.now().toString(36), fecha:hoy, monto:mxn,
+                moneda:mon, montoLocal:(mon==="MXN"?null:v), concepto:"" }] };
+    sync(m);                       // queda pagado porque el abono cubre el plan
+    S.movs.push(m);
+    if(mon!=="MXN") S.ajustes.monedaUltima = mon;
+    guardar(); cerrar(); render();
+    aviso("Registrado " + (mon==="MXN" ? fmt(mxn) : v.toLocaleString("es-MX")+" "+mon));
+  };
+  document.getElementById("g-cx").onclick=cerrar;
+}
+
 function hojaEditar(m){
   const nuevo = !m;
-  m = m || {id:"m"+Date.now(), fecha:hoyISO(), concepto:"", categoria:"Comida", tipo:"gasto", montoPlan:0, montoReal:null, estado:"pendiente", moneda:null, montoLocal:null, nota:"", bolsa:false, fechaInicio:null, fechaFin:null, pais:null, abonos:[]};
+  m = m || {id:"m"+Date.now(), fecha:hoyISO(), concepto:"", categoria:"Comida", tipo:"gasto",
+            montoPlan:0, estado:"por_pagar", cerradoAMano:false, nota:"",
+            bolsa:false, pais:null, fechaInicio:null, fechaFin:null, abonos:[]};
   abrir(`
-    <h2>${nuevo?"Nuevo movimiento":(m.bolsa?"Editar bolsa":"Editar movimiento")}</h2>
-    <div class="cap">${nuevo?"Se agrega como pendiente.":"Cambia lo que necesites."}</div>
+    <h2>${nuevo?"Nuevo movimiento":"Editar"}</h2>
+    <div class="cap">${nuevo?"Nace por pagar.":"Cambia lo que necesites."}</div>
     <label><span class="lb">Concepto</span><input id="e-con" value="${esc(m.concepto)}" placeholder="Ramen en Shinjuku"></label>
     <div class="grid2">
       <label><span class="lb">Fecha</span><input type="date" id="e-fec" value="${m.fecha}"></label>
-      <label><span class="lb">${m.bolsa?"Monto reservado (MXN)":"Monto planeado (MXN)"}</span><input type="number" inputmode="decimal" id="e-mon" value="${m.montoPlan}"></label>
+      <label><span class="lb">Monto planeado (MXN)</span><input type="number" inputmode="decimal" id="e-mon" value="${m.montoPlan}"></label>
     </div>
     <label><span class="lb">Nota (opcional)</span><input id="e-nota" value="${esc(m.nota||"")}" placeholder="Reserva #, recordatorio…"></label>
     <div class="grid2">
-      <label><span class="lb">Categoría</span><select id="e-cat">${CATS.map(c=>`<option ${c===m.categoria?"selected":""}>${c}</option>`).join("")}</select></label>
+      <label><span class="lb">Categoría</span><select id="e-cat">${CATS.map(c=>`<option ${c===m.categoria?"selected":""}>${esc(c)}</option>`).join("")}</select></label>
       <label><span class="lb">Tipo</span><select id="e-tip"><option value="gasto" ${m.tipo==="gasto"?"selected":""}>Gasto</option><option value="ingreso" ${m.tipo==="ingreso"?"selected":""}>Ingreso</option></select></label>
     </div>
-    ${m.bolsa?`<div class="grid2">
-        <label><span class="lb">Inicio del tramo</span><input type="date" id="e-bi" value="${m.fechaInicio||m.fecha}"></label>
-        <label><span class="lb">Fin del tramo</span><input type="date" id="e-bf" value="${m.fechaFin||finQuincena(m.fechaInicio||m.fecha)}"></label>
-      </div>
-      <label><span class="lb">País (opcional · fija la moneda del abono)</span>
-        <select id="e-bp"><option value="">— sin país —</option>${Object.keys(MON_PAIS).map(p=>`<option ${p===m.pais?"selected":""}>${p}</option>`).join("")}</select></label>`:""}
+    <label><span class="lb">Acceso rápido (bolsa)</span>
+      <select id="e-bp">
+        <option value="" ${!m.bolsa?"selected":""}>No</option>
+        ${PAISES.map(p=>`<option value="${esc(p)}" ${m.bolsa&&m.pais===p?"selected":""}>Sí, en ${esc(p)}</option>`).join("")}
+      </select></label>
     <div class="acts">
       <button class="btn" id="e-ok">${nuevo?"Agregar movimiento":"Guardar cambios"}</button>
-      ${nuevo?"":`<button class="btn danger" id="e-del">Eliminar ${m.bolsa?"bolsa":"movimiento"}</button>`}
+      ${nuevo?"":`<button class="btn danger" id="e-del">Eliminar movimiento</button>`}
       <button class="btn ghost" id="e-cx">Cancelar</button>
     </div>`);
   document.getElementById("e-ok").onclick=()=>{
@@ -968,18 +959,14 @@ function hojaEditar(m){
     const mp=parseFloat(document.getElementById("e-mon").value);
     if(!con) return aviso("Falta el concepto");
     if(isNaN(mp)||mp<0) return aviso("Escribe un monto válido");
-    if(m.bolsa){   // el tramo sólo se edita en bolsas ya existentes; se crean desde Ajustes
-      const bi=document.getElementById("e-bi").value, bf=document.getElementById("e-bf").value;
-      if(!bi||!bf) return aviso("La bolsa necesita inicio y fin de tramo");
-      if(bf<bi) return aviso("El fin del tramo va después del inicio");
-      const bp=document.getElementById("e-bp").value||null;
-      m.fechaInicio=bi; m.fechaFin=bf; m.pais=bp; m.moneda = bp?MON_PAIS[bp]:null; m.montoLocal=null;
-    }
+    const bp=document.getElementById("e-bp").value||null;
+    m.bolsa = !!bp; m.pais = bp;      // "bolsa" es sólo la etiqueta de acceso rápido
     m.concepto=con; m.fecha=document.getElementById("e-fec").value;
     m.nota=document.getElementById("e-nota").value.trim(); m.montoPlan=mp;
     m.categoria=document.getElementById("e-cat").value; m.tipo=document.getElementById("e-tip").value;
     if(!Array.isArray(m.abonos)) m.abonos=[];
-    if(nuevo) S.movs.push(m); else trasAbonar(m);   // cambiar el plan puede cubrirlo o destaparlo
+    sync(m);                          // cambiar el plan puede cubrirlo o destaparlo
+    if(nuevo) S.movs.push(m);
     guardar(); cerrar(); render(); aviso(nuevo?"Movimiento agregado":"Cambios guardados");
   };
   if(!nuevo) document.getElementById("e-del").onclick=()=>{
@@ -988,45 +975,53 @@ function hojaEditar(m){
   document.getElementById("e-cx").onclick=cerrar;
 }
 
-function hojaSouvenirs(){
-  const existe = c => S.movs.some(m=>m.bolsa && m.concepto===c);
+/* Administrar bolsas: asignar país a las que ya existen (una bolsa sin país no
+   sale en accesos rápidos) y crear las de Souvenirs que falten. */
+function hojaBolsas(){
+  const bs = orden().filter(m=>m.bolsa);
+  const existe = c => S.movs.some(m=>m.concepto===c);
   abrir(`
-    <h2>Bolsas de Souvenirs</h2>
-    <div class="cap">Un tramo por país. Ajusta montos y fechas si quieres; las que ya existen se omiten.</div>
-    ${SOUV.map((s,i)=>`
-      <div style="border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:12px">
-        <div class="srow">
-          <div><div class="lb2">${esc(s.concepto)}${existe(s.concepto)?" · ya existe":""}</div>
-            <div class="dd">${esc(s.pais)} · moneda ${MON_PAIS[s.pais]}</div></div>
-          <input type="number" inputmode="decimal" data-sv-monto="${i}" value="${s.monto}" ${existe(s.concepto)?"disabled":""}>
-        </div>
-        <div class="grid2">
-          <input type="date" data-sv-ini="${i}" value="${s.ini}" ${existe(s.concepto)?"disabled":""}>
-          <input type="date" data-sv-fin="${i}" value="${s.fin}" ${existe(s.concepto)?"disabled":""}>
-        </div>
+    <h2>Bolsas</h2>
+    <div class="cap">Una bolsa sale en los accesos rápidos de su país. Sin país no sale, pero sigue siendo un movimiento normal.</div>
+    ${bs.length?`<div class="eyebrow" style="margin:14px 0 8px">Bolsas existentes</div>`:""}
+    ${bs.map(m=>`<div class="srow">
+        <div><div class="lb2">${esc(m.concepto)}</div>
+          <div class="dd">${diaCorto(m.fecha)} · ${esc(m.categoria)} · faltan ${fmt(falta(m))}</div></div>
+        <select data-bp="${m.id}">
+          <option value="">—</option>
+          ${PAISES.map(p=>`<option value="${esc(p)}" ${m.pais===p?"selected":""}>${esc(p)}</option>`).join("")}
+        </select>
       </div>`).join("")}
-    <div class="acts">
-      <button class="btn" id="sv-ok">Crear las que falten</button>
+    <div class="eyebrow" style="margin:16px 0 8px">Crear bolsas de Souvenirs</div>
+    ${SOUV.map((s,i)=>`
+      <div class="srow">
+        <div><div class="lb2">${esc(s.concepto)}${existe(s.concepto)?" · ya existe":""}</div>
+          <div class="dd">${esc(s.pais)} · moneda ${MON_PAIS[s.pais]}</div></div>
+        <input type="number" inputmode="decimal" data-sv-monto="${i}" value="${s.monto}" ${existe(s.concepto)?"disabled":""}>
+      </div>`).join("")}
+    <div class="acts" style="margin-top:14px">
+      <button class="btn" id="sv-ok">Guardar</button>
       <button class="btn ghost" id="sv-cx">Cancelar</button>
     </div>`);
   document.getElementById("sv-ok").onclick=()=>{
+    sheet.querySelectorAll("[data-bp]").forEach(sel=>{
+      const m=S.movs.find(x=>x.id===sel.dataset.bp);
+      if(m) m.pais = sel.value || null;
+    });
     let n=0;
     for(let i=0;i<SOUV.length;i++){
       const s=SOUV[i];
       if(existe(s.concepto)) continue;
       const monto=parseFloat(document.querySelector(`[data-sv-monto="${i}"]`).value);
-      const ini=document.querySelector(`[data-sv-ini="${i}"]`).value;
-      const fin=document.querySelector(`[data-sv-fin="${i}"]`).value;
       if(isNaN(monto)||monto<0) return aviso("Monto inválido en "+s.concepto);
-      if(!ini||!fin||fin<ini)   return aviso("Fechas inválidas en "+s.concepto);
-      S.movs.push({ id:"sv"+Date.now().toString(36)+i, fecha:ini, concepto:s.concepto,
-        categoria:"Souvenirs", tipo:"gasto", montoPlan:monto, montoReal:null,
-        estado:"pendiente", moneda:MON_PAIS[s.pais], montoLocal:null, nota:"",
-        bolsa:true, fechaInicio:ini, fechaFin:fin, pais:s.pais, abonos:[] });
-      n++;
+      const nm = { id:"sv"+Date.now().toString(36)+i, fecha:s.ini, concepto:s.concepto,
+        categoria:"Souvenirs", tipo:"gasto", montoPlan:monto, estado:"por_pagar",
+        cerradoAMano:false, nota:"", bolsa:true, pais:s.pais,
+        fechaInicio:s.ini, fechaFin:s.fin, abonos:[] };
+      sync(nm); S.movs.push(nm); n++;
     }
-    if(!n) return aviso("Ya existen las cuatro bolsas");
-    guardar(); cerrar(); render(); aviso(n+" bolsa"+(n===1?"":"s")+" de Souvenirs creada"+(n===1?"":"s"));
+    guardar(); cerrar(); render();
+    aviso(n ? n+" bolsa"+(n===1?"":"s")+" de Souvenirs creada"+(n===1?"":"s") : "Bolsas actualizadas");
   };
   document.getElementById("sv-cx").onclick=cerrar;
 }
@@ -1035,23 +1030,30 @@ function enlazar(){
   view.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{filtro=b.dataset.f;render();});
   view.querySelectorAll("[data-qk]").forEach(b=>b.onclick=()=>{
     const m=S.movs.find(x=>x.id===b.dataset.qk); if(m) hojaAbono(m,null,false); });
-  view.querySelectorAll("[data-liq]").forEach(b=>b.onclick=()=>{
-    const m=S.movs.find(x=>x.id===b.dataset.liq); if(m) hojaBolsa(m); });
+  view.querySelectorAll("[data-mov]").forEach(b=>b.onclick=()=>{
+    const m=S.movs.find(x=>x.id===b.dataset.mov); if(m) hojaMov(m); });
   view.querySelectorAll(".subs .sub").forEach(s=>s.onclick=()=>{
     const b=S.movs.find(x=>x.id===s.dataset.bid); if(!b) return;
     const a=b.abonos.find(x=>String(x.id)===s.dataset.aid); if(a) hojaAbono(b,a,false); });
   view.querySelectorAll(".row").forEach(r=>{
     const m=S.movs.find(x=>x.id===r.dataset.id); if(!m) return;
-    // con abonos ya registrados el ✓ abre la hoja de pagos; si no, la de confirmar
-    r.querySelector('[data-act="tick"]').onclick=e=>{e.stopPropagation(); porPartes(m)?hojaBolsa(m):hojaConfirmar(m);};
-    r.querySelector('.hit').onclick=()=>{ m.bolsa?hojaBolsa(m):hojaEditar(m); };
+    // toda la fila abre LA hoja. Sin ✓ separado: eso es lo que confundía.
+    r.querySelector('.hit').onclick=()=>hojaMov(m);
     const ex=r.querySelector('[data-act="expand"]');
     if(ex) ex.onclick=e=>{ e.stopPropagation();
       if(abiertos.has(m.id)) abiertos.delete(m.id); else abiertos.add(m.id);
       render(); };
   });
+  const rg=document.getElementById("reg");
+  if(rg) rg.onclick=hojaRapido;
+  const ps=document.getElementById("paises");
+  if(ps) ps.onclick=e=>{
+    const b=e.target.closest("[data-pais]"); if(!b) return;
+    S.ajustes.paisActual=b.dataset.pais; guardar(); render();
+    aviso("País: "+b.dataset.pais+" · moneda "+monedaPais());
+  };
   const sv=document.getElementById("souv");
-  if(sv) sv.onclick=hojaSouvenirs;
+  if(sv) sv.onclick=hojaBolsas;
   const si=document.getElementById("gsi");
   if(si) si.onclick=()=>{ const v=parseFloat(document.getElementById("si").value);
     if(isNaN(v)) return aviso("Monto inválido");
@@ -1120,6 +1122,15 @@ function enlazar(){
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{tab=b.dataset.t;window.scrollTo(0,0);render();});
 document.getElementById("fab").onclick=()=>hojaEditar(null);
 render();
+
+/* Si la migración reabrió movimientos que v1.3 había dado por pagados sin
+   cubrir el plan, se dice en voz alta: su remanente vuelve al proyectado. */
+if(REABIERTOS>0){
+  guardar();
+  setTimeout(()=>aviso(REABIERTOS===1
+    ? "1 movimiento estaba pagado a medias y volvió a quedar abierto"
+    : REABIERTOS+" movimientos estaban pagados a medias y volvieron a quedar abiertos"), 700);
+}
 
 if("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(()=>{});
 if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(()=>{});

@@ -14,7 +14,7 @@ Producción: https://mbasilio-code.github.io/asia2026/ (GitHub Pages sobre `main
 
 - **Sin frameworks, sin bundler, sin dependencias npm.** La simplicidad es un requisito explícito, no un accidente. No introducir React, Tailwind, build steps ni `package.json`.
 - **No separar el CSS ni el JS de `index.html`.** El `<style>` y el `<script>` se quedan inline.
-- **Al tocar `index.html`, subir `CACHE` en [sw.js:3](sw.js#L3)** (`asia2026-v3` → `v4` → …). Sin eso los dispositivos ya instalados siguen sirviendo la versión anterior indefinidamente.
+- **Al tocar `index.html`, subir `CACHE` en [sw.js:3](sw.js#L3)** (`asia2026-v4` → `v5` → …). Sin eso los dispositivos ya instalados siguen sirviendo la versión anterior indefinidamente.
 - No afirmar que algo funciona sin haberlo abierto en un navegador sobre HTTP.
 
 ## Comandos
@@ -27,7 +27,7 @@ En esta máquina **no hay Python ni Node instalados** (`python`/`python3` son lo
 powershell -NoProfile -ExecutionPolicy Bypass -File "c:\Users\Mike Bas\Projects\asia2026-serve.ps1"
 ```
 
-Sirve `http://localhost:8080/` con los MIME correctos (`sw.js` como `application/javascript`, obligatorio o el registro del service worker falla) y expone una ruta `/__probe` que sirve una copia instrumentada de `index.html` — captura `window.onerror`, `unhandledrejection`, `console.error/warn`, el estado del SW y las cachés, y lo hace POST a `/__report`, que el servidor escribe a disco. `index.html` en disco nunca se modifica.
+Acepta `-Root` y `-Port`, así que sirve igual una copia instrumentada desde otra carpeta. Usa los MIME correctos (`sw.js` como `application/javascript`, obligatorio o el registro del service worker falla) y expone `/__probe`, que sirve una copia instrumentada de `index.html` — captura `window.onerror`, `unhandledrejection`, `console.error/warn`, el estado del SW y las cachés, y lo manda por POST a la ruta de reporte, que el servidor escribe a disco. `index.html` en disco nunca se modifica.
 
 **Nunca abrir con `file://`**: sin origen HTTP el service worker no se registra y la app no se comporta como en producción.
 
@@ -35,32 +35,41 @@ Mientras se desarrolla: DevTools → **Application** → **Service Workers** →
 
 ### Verificar sin navegador a mano
 
-No hay motor JS local, pero **Edge headless sí sirve** y es como se verificaron v1.2 y v1.3:
+No hay motor JS local, pero **Edge headless sí sirve**. Así se verificaron v1.2, v1.3 y v2.0.
+
+⚠️ **Lo que cambió con Edge 151** (lo documentado antes vale para versiones viejas):
+
+- **`--headless=old` ya no existe.** Chromium lo quitó en la 132; Edge 151 lo acepta como bandera pero se comporta como el modo nuevo. Usar **`--headless=new`**.
+- **`--dump-dom` devuelve vacío en ambos modos.** Ya no sirve para leer resultados. La salida del arnés se manda por **POST a la ruta de reporte del servidor** (XHR **síncrono**, para que termine antes de que se agote el `--virtual-time-budget`) y se lee del archivo en disco.
+- **`--screenshot` sí funciona** con `--headless=new`.
+- **El viewport queda ~62px más ancho que `--window-size`** (con `--window-size=560` el `innerWidth` real es 536). Como el `.wrap` tiene `max-width:540px`, capturar a 430 **recorta y parece desbordamiento sin serlo**. Para medir desbordamiento de verdad hay que comparar `scrollWidth` vs `clientWidth` desde JS, nunca mirar la imagen.
 
 ```powershell
 & "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" `
-  --headless=old --disable-gpu --no-sandbox --user-data-dir="<perfil temporal>" `
-  --virtual-time-budget=6000 --dump-dom "http://localhost:8080/"
+  --headless=new --disable-gpu --no-sandbox --user-data-dir="<perfil limpio>" `
+  --log-level=3 --virtual-time-budget=8000 --window-size=560,1700 `
+  --hide-scrollbars --screenshot="<salida>.png" "http://localhost:8099/"
 ```
 
-Detalles que cuestan tiempo si se redescubren:
+Otros detalles que cuestan tiempo si se redescubren:
 
-- **`--headless=old` funciona; `--headless=new` no** — con el modo nuevo `--dump-dom` y `--screenshot` devuelven vacío.
-- **Usar un `--user-data-dir` limpio por corrida.** Si no, el service worker cacheado de la corrida anterior sirve HTML viejo y las pruebas mienten.
-- **El viewport ignora `--window-size`** (queda en ~756px de ancho) aunque la captura sí lo respeta: una captura estrecha recorta y parece desbordamiento. Para medir desbordamiento hay que leer `scrollWidth` vs `clientWidth` desde JS, no mirar la imagen.
-- **Para capturar una hoja inferior hace falta `--virtual-time-budget`**, o sale a medio deslizarse (`transform` con transición de .22s en [index.html](index.html)).
-- El patrón de arnés que funciona: inyectar un `<script>` **antes de `</body>`**, es decir después del script de la app. Al ser scripts clásicos del mismo documento, el arnés ve todos los `const`/`let`/`function` de nivel superior (`S`, `calc`, `render`, `hojaAbono`, …) y puede hacer aserciones y `.click()` reales. Los resultados se escriben en un `<pre id="__out">` y se leen con `--dump-dom`.
+- **Usar un `--user-data-dir` limpio por corrida.** Si no, el service worker cacheado de la corrida anterior sirve HTML viejo y las pruebas mienten. En el arnés conviene **no copiar `sw.js`** a la carpeta servida: sin SW no hay caché que mienta.
+- **Para capturar una hoja inferior hace falta `--virtual-time-budget`**, o sale a medio deslizarse (`transform` con transición de .22s).
+- El patrón de arnés que funciona: inyectar un `<script>` **antes de `</body>`**, es decir después del script de la app. Al ser scripts clásicos del mismo documento, el arnés ve todos los `const`/`let`/`function` de nivel superior (`S`, `calc`, `render`, `sync`, `hojaMov`, …) y puede hacer aserciones y `.click()` reales.
 - **Al inyectar con PowerShell, usar `.Replace()` literal, no el operador `-replace`.** El regex de .NET expande `$0` dentro del texto insertado y corrompe el arnés en silencio.
+- **`Start-Process -ArgumentList` no entrecomilla.** Cualquier ruta con espacios (todas las de este proyecto) hay que entrecomillarla a mano dentro de la cadena, o el servidor arranca con argumentos partidos y nunca escucha.
+- **No redirigir `2>$null` en un `.exe`.** En PowerShell 5.1 eso envuelve cada línea de stderr en un `ErrorRecord` y con `$ErrorActionPreference="Stop"` aborta aunque el proceso haya salido con código 0.
+- **Los `.ps1` se leen como ANSI si no tienen BOM.** Un guion largo o un acento en el script rompe el parseo con errores incomprensibles ("string is missing the terminator"). Mantener los `.ps1` en ASCII puro.
 
 ## Los tres números de versión (no confundirlos)
 
 | Dónde | Valor actual | Qué es | Cuándo se sube |
 |---|---|---|---|
-| [sw.js:3](sw.js#L3) `CACHE` | `asia2026-v4` | Nombre de la Cache Storage | **En cada cambio a `index.html`** |
-| [index.html:219](index.html#L219) `KEY` | `asia2026-v1` | Clave de `localStorage` | **Casi nunca** — ver abajo |
-| [index.html:730](index.html#L730) | `v1.3` | Cadena visible en Ajustes | Manual, cosmético |
+| [sw.js:3](sw.js#L3) `CACHE` | `asia2026-v5` | Nombre de la Cache Storage | **En cada cambio a `index.html`** |
+| [index.html:223](index.html#L223) `KEY` | `asia2026-v1` | Clave de `localStorage` | **Casi nunca** — ver abajo |
+| [index.html:698](index.html#L698) | `v2.0` | Cadena visible en Ajustes | Manual, cosmético |
 
-⚠️ **`KEY` no es una versión de caché.** Es dónde viven los datos del usuario. Cambiarla equivale a borrarle todos sus movimientos: la app no encuentra estado previo y cae en `nuevoEstado()`. Los cambios de esquema se resuelven con `migrar()`, no tocando `KEY`. La similitud de nombres entre `asia2026-v1` y `asia2026-v4` es una trampa fácil.
+⚠️ **`KEY` no es una versión de caché.** Es dónde viven los datos del usuario. Cambiarla equivale a borrarle todos sus movimientos: la app no encuentra estado previo y cae en `nuevoEstado()`. Los cambios de esquema se resuelven con `migrar()`, no tocando `KEY`. La similitud de nombres entre `asia2026-v1` y `asia2026-v5` es una trampa fácil.
 
 ## Modelo de datos
 
@@ -70,7 +79,8 @@ Un único objeto `S` serializado a JSON en `localStorage[KEY]`:
 S = {
   ajustes: { saldoInicial: 40000,
              tasas: {MXN:1, JPY:.125, KRW:.0135, CNY:2.60, USD:18.50},
-             monedaUltima: "MXN" },
+             monedaUltima: "MXN",
+             paisActual: "México" },   // ← manual, decide accesos rápidos y moneda
   movs: [ /* movimientos */ ]
 }
 ```
@@ -79,15 +89,14 @@ Cada movimiento:
 
 ```js
 { id, fecha:"YYYY-MM-DD", concepto, categoria, tipo:"gasto"|"ingreso",
-  montoPlan,            // siempre MXN, lo presupuestado
-  montoReal,            // siempre MXN, lo que realmente pasó (null si pendiente)
-  estado:"pendiente"|"confirmado",
-  moneda, montoLocal,   // moneda original y monto en esa moneda (null si fue MXN)
+  montoPlan,                                  // siempre MXN, lo presupuestado
+  estado:"por_pagar"|"a_medias"|"pagado",     // SIEMPRE derivado por sync()
+  cerradoAMano,        // true = se cerró sin cubrir el plan (liberó el remanente)
+  abonos: [],          // el ÚNICO registro de dinero movido
   nota,
-  abonos: [],           // pagos parciales — ver abajo
-  bolsa: false,         // ¿es una bolsa? sólo cambia UX, no aritmética
-  fechaInicio, fechaFin, pais   // sólo en bolsas; null en todo lo demás
-}
+  bolsa: false,        // etiqueta: sale en accesos rápidos. Nada más.
+  pais,                // de qué país es la bolsa (null = no sale en accesos rápidos)
+  fechaInicio, fechaFin }   // informativos; NO deciden nada
 ```
 
 Cada abono:
@@ -98,141 +107,172 @@ Cada abono:
   concepto }               // opcional; vacío se muestra como "Gasto suelto"
 ```
 
-`nuevoEstado()` ([index.html:283](index.html#L283)) construye el estado desde `SEED` ([index.html:237](index.html#L237)), tuplas `[fecha, concepto, categoria, tipo, montoPlan, bolsaMeta?]` donde el sexto elemento opcional `{ini, fin, pais?}` marca la bolsa.
+**No existe `montoReal`.** Se retiró en v2.0: si algo está pagado, el monto es `ejercido(m)`. Tener dos registros del mismo hecho (un total y una lista de abonos) es lo que permitía que un movimiento apareciera saldado con abonos incompletos.
 
-### Pagos por partes: el concepto central
+### Los tres estados (el corazón de v2.0)
 
-**Cualquier movimiento se puede pagar de golpe o por partes.** Un movimiento nace `pendiente` con sólo `montoPlan`. A partir de ahí hay dos caminos:
-
-- **Pagar todo** → `hojaConfirmar` ([index.html:734](index.html#L734)) captura `montoReal` y lo marca `confirmado`. Es el flujo original.
-- **Abonar una parte** → `hojaAbono` ([index.html:791](index.html#L791)) empuja un abono a `m.abonos`.
-
-En cuanto un movimiento tiene abonos, cambia de aritmética. `porPartes()` ([index.html:365](index.html#L365)) es el interruptor: `m.bolsa || m.abonos.length > 0`.
-
-```js
-real(m)  // dinero que YA se movió: la suma de abonos
-proy(m)  // lo que sigue comprometido: max(0, montoPlan − ejercido)
-efectivo(m) = real(m) + proy(m)
+```
+por_pagar → sin abonos
+a_medias  → tiene abonos pero no cubren el plan
+pagado    → los abonos cubren el plan, o se cerró a mano
 ```
 
-Un movimiento a medio pagar aporta **a los dos lados**: lo abonado al saldo real, lo que falta al proyectado. Renta de $26,850 con un abono de $13,425 → `real −13,425`, `proy −13,425`. Por eso **abonar no mueve el saldo proyectado**: cada peso que sale de caja sale también de lo comprometido. Es la propiedad que hace correcto todo el modelo.
+**`estado` se persiste pero NUNCA se asigna a mano.** Lo recalcula `sync(m)` ([index.html:393](index.html#L393)) después de cualquier cambio a los abonos, al plan o a `cerradoAMano`:
 
-`efectivo()` sigue valiendo `−max(montoPlan, ejercido)` mientras algo esté abierto, que es exactamente la semántica anterior generalizada — por eso el saldo corrido de `listaHTML` no necesitó cambios.
+```js
+m.estado = (m.cerradoAMano || (ej>0 && ej>=m.montoPlan)) ? "pagado"
+         : (ej>0 ? "a_medias" : "por_pagar");
+```
 
-De ahí salen las tres cifras de la portada, en `calc()` ([index.html:434](index.html#L434)): **saldo real** (suma de `real`), **saldo proyectado** (real + suma de `proy`) y **desviación** (`desvDe`, [index.html:387](index.html#L387)).
+Se persiste para que el respaldo sea legible; se deriva para que sea **imposible** que un movimiento a medias termine marcado como pagado. Toda mutación de abonos debe terminar en `sync()`.
+
+⚠️ **Regla dura:** un `a_medias` jamás desaparece de la vista por defecto y jamás se muestra palomeado. Hay una prueba de regresión de este caso exacto (ver abajo).
+
+### El bug que originó v2.0 (para no repetirlo)
+
+v1.3 tenía dos estados y una hoja `hojaConfirmar` cuyo campo venía **precargado con el plan** y cuyo botón principal se re-etiquetaba a `"Pagar " + <lo que teclearas>`. Teclear la mitad y tocarlo marcaba el movimiento como `confirmado` con `montoReal` a la mitad: desaparecía del filtro Pendientes, reaparecía palomeado en Todos, y como no tenía abonos el ✓ volvía a abrir la misma hoja, sin camino a un segundo abono.
+
+De ahí las tres decisiones que **no hay que deshacer**:
+
+1. El campo de abono **nace vacío**. Ningún control acepta un monto arbitrario y lo llama saldado.
+2. "Pagar el resto" es un botón aparte que **muestra su monto** y precarga un abono; no es un camino de pago distinto.
+3. No hay ✓ separado del cuerpo de la fila: **toda la fila abre la misma hoja**.
+
+### Aritmética: una sola, sin ramas
+
+Bolsas y gastos son lo mismo. Seis funciones de doble camino de v1.3 (`real`, `proy`, `desvDe`, `porPartes`, `trasAbonar`, `filaHTML`) quedaron en **cero ramas**:
+
+```js
+const ejercido = m => suma de m.abonos.monto        // siempre MXN
+const falta    = m => max(0, m.montoPlan - ejercido(m))
+const real     = m => signo(m) * ejercido(m)                        // ya se movió
+const proy     = m => esPagado(m) ? 0 : signo(m) * falta(m)         // sigue comprometido
+const efectivo = m => real(m) + proy(m)                             // −max(plan, ejercido)
+const desvDe   = m => esPagado(m) ? signo(m)*(ejercido(m)-m.montoPlan)
+                                  : -max(0, ejercido(m)-m.montoPlan)
+```
+
+Un movimiento a medias aporta **a los dos lados**: lo abonado a real, lo que falta a proyectado. Por eso **abonar no mueve el saldo proyectado**: cada peso que sale de caja sale también de lo comprometido. Es la propiedad que hace correcto todo el modelo.
+
+`efectivo()` vale `−max(plan, ejercido)` mientras algo siga abierto, que es justo lo que necesita el saldo corrido de `listaHTML`.
 
 **Regla A para el sobregiro:** pagar de más se reconoce en la desviación de inmediato; el ahorro sólo al cerrar. Si no, el proyectado ya habría absorbido el golpe mientras la desviación seguiría diciendo "vas en plan".
 
 `gastadoViaje` excluye la categoría `Hogar`.
 
-### Cierre automático
-
-`trasAbonar(m)` ([index.html:395](index.html#L395)) corre después de tocar los abonos de un movimiento:
-
-- **Movimiento normal**: al quedar cubierto (`ejercido >= montoPlan`) se cierra solo, con `montoReal = ejercido` y aviso "«concepto» cubierta". Si un abono se borra o se reduce por debajo del plan, se vuelve a abrir.
-- **Bolsa**: nunca. Ahí el sobrante importa y la liquidación es manual, desde `hojaBolsa`.
-
-Esa es la única diferencia de comportamiento entre ambos.
+⚠️ **Todo cálculo nuevo que sume dinero debe usar `real()`/`proy()`/`gastoReal()`/`falta()`**, nunca leer `montoPlan` a pelo ni inventar un total.
 
 ### Qué es una bolsa (y qué ya no)
 
-Tras v1.3, `bolsa:true` significa **sólo dos cosas**:
+Desde v2.0, `bolsa:true` significa **una sola cosa**: el movimiento sale en los **accesos rápidos** de Inicio, para el país que tenga en `pais`. Nada más. Misma aritmética, misma fila, misma hoja, mismos filtros que cualquier otro movimiento.
 
-1. Aparece en **Gasto rápido** en Inicio, resuelta por categoría y fecha.
-2. Si tiene `pais`, **preselecciona la moneda** del tramo y muestra los chips visibles.
+Una bolsa **sin `pais` no sale en accesos rápidos**, pero sigue siendo un movimiento normal en "Me falta pagar" y en Movimientos. Se le asigna país desde Ajustes → *Administrar bolsas* ([`hojaBolsas`](index.html#L980)) o desde el editor.
 
-Además no se cierra sola y usa vocabulario propio ("Reservado/Ejercido/Disponible" en vez de "Planeado/Pagado/Falta"). Todo lo demás es común con cualquier movimiento. **No inventar mecanismos nuevos de parcialidades: la aritmética de abonos ya cubre todos los casos.**
+**No inventar mecanismos nuevos de parcialidades: la aritmética de abonos ya cubre todos los casos.**
 
-### Dos periodizaciones conviven
+### El país actual manda
 
-`Comida` y `Traslados` van por quincena; `Souvenirs` va por **tramo de país**. Por eso cada bolsa lleva su propio `fechaInicio`/`fechaFin` y **`quincena()` no sirve como resolutor**.
+`ajustes.paisActual` se elige a mano en Ajustes (México / EUA / Japón / Corea / China) y decide **dos cosas**:
 
-`bolsaVigente(cat, hoy)` ([index.html:417](index.html#L417)) es de dos niveles:
+1. Qué bolsas salen en accesos rápidos — `bolsasDelPais()` ([index.html:425](index.html#L425)), que es un `filter` por `pais` y `abierto`, ordenado por fecha.
+2. Qué moneda se preselecciona en `hojaAbono` y `hojaRapido` — `monedaPais()`.
 
-```
-vigente  → fechaInicio ≤ hoy ≤ fechaFin, gana la de fechaInicio MÁS RECIENTE
-rezagada → ninguna cubre hoy: la abierta más reciente ya vencida
-futura   → sólo quedan bolsas que aún no arrancan
-```
+⚠️ **Las fechas no resuelven nada.** v1.3 tenía un resolutor de dos niveles (vigente / rezagada / futura) con desempate por `fechaInicio` más reciente; se eliminó entero junto con `rezagadas()` y el empujón de liquidación. `fechaInicio`/`fechaFin` sobreviven como dato informativo. **No reintroducir un resolutor por fechas.**
 
-El desempate por `fechaInicio` más reciente es lo que hace funcionar el **tramo envolvente de Souvenirs EUA (29 ago – 26 sep)**: cede ante Japón/Corea/China mientras estás en cada país, y reaparece solo el 25 de septiembre para el duty free del regreso. Sin ese desempate, una bolsa liquidada haría que el resolutor cayera hacia atrás a cualquier tramo olvidado — bug silencioso.
-
-`rezagadas()` ([index.html:430](index.html#L430)) alimenta el empujón de liquidación en Inicio. El cierre nunca es automático: se liquida a mano, en el aeropuerto.
+Si dos bolsas abiertas comparten país salen **las dos**, ordenadas por fecha. Es deliberado: sin desempates invisibles.
 
 ### Divisas: la tasa se congela al capturar
 
-`monto` de un abono **siempre queda en MXN**, convertido con la tasa vigente en ese momento; `moneda` y `montoLocal` conservan lo que se tecleó. Cambiar las tasas en Ajustes **no reconvierte** nada ya capturado — es deliberado. Cada abono congela la tasa de su propio día, que es más fiel que congelar toda una bolsa a una sola tasa.
+`monto` de un abono **siempre queda en MXN**, convertido con la tasa vigente en ese momento; `moneda` y `montoLocal` conservan lo que se tecleó. Cambiar las tasas en Ajustes **no reconvierte** nada ya capturado — es deliberado. Cada abono congela la tasa de su propio día.
 
-Moneda por defecto al abonar:
+La moneda por defecto sale de `paisActual`, **salvo** al editar un abono ya capturado (conserva la suya) y al usar "Pagar el resto" (va en MXN, porque el faltante es un monto en MXN).
 
-| Caso | Arranca en |
-|---|---|
-| Bolsa con `pais` (Souvenirs) | `MON_PAIS[pais]`, chips visibles |
-| Bolsa sin país (Comida, Traslados) | `S.ajustes.monedaUltima` |
-| Movimiento normal | **MXN siempre** |
+## Migración
 
-Un movimiento normal no hereda `monedaUltima` a propósito: la renta se paga en pesos aunque el último abono haya sido en yenes, y equivocarse ahí multiplica el monto en silencio. `monedaUltima` sólo se actualiza si el abono fue en moneda extranjera o si el destino era una bolsa.
+`migrar()` ([index.html:327](index.html#L327)) corre en **dos puntos**: al cargar y al importar un respaldo. Es idempotente y no borra campos.
+
+Convierte los dos estados de v1.x a los tres nuevos. La idea central: **todo `montoReal` de v1 se vuelve un abono sintético**, porque en v2 el único registro de dinero movido son los abonos.
+
+```
+confirmado, ejercido>0 y montoReal===ejercido → pagado + cerradoAMano
+      (así se veía una bolsa liquidada a propósito: NO se debe reabrir)
+confirmado en cualquier otro caso            → abono sintético por la diferencia,
+      luego la regla normal: cubre el plan → pagado; no lo cubre → a_medias
+pendiente con abonos                         → a_medias
+pendiente sin abonos                         → por_pagar
+```
+
+⚠️ **El discriminador `montoReal === ejercido` es indispensable.** Sin él, el mapeo "confirmado + abonos que no cubren → a_medias" reabre las bolsas que el usuario liquidó deliberadamente y mueve sus números.
+
+**Neutralidad aritmética:** cinco de las seis clases de registro dan los tres números idénticos antes y después (hay prueba automatizada que compara contra las fórmulas v1.3 congeladas). La sexta cambia **a propósito**: `confirmado + montoReal < montoPlan + sin abonos` es el registro que el botón buggy dejaba mal cerrado; se reabre a `a_medias` y su remanente vuelve al proyectado. Eso es el objetivo de la versión, no un efecto secundario. `REABIERTOS` cuenta cuántos fueron y la app lo avisa al arrancar.
+
+También detecta bolsas legadas por el sufijo `(bolsa del bloque)`. **No inventa movimientos**: las bolsas de Souvenirs están en `SEED` pero se crean a mano desde Ajustes.
 
 ## Arquitectura del render
 
 Sin framework y sin diffing: **`render()` reemplaza `view.innerHTML` completo** y después `enlazar()` vuelve a colgar todos los manejadores.
 
 ```
-render()  ([index.html:475](index.html#L475))
-  ├── marca el tab activo en <nav>, muestra/oculta el FAB
+render()  ([index.html:481](index.html#L481))
+  ├── marca el tab activo en <nav>, muestra el FAB sólo en Movimientos
   ├── view.innerHTML = { inicio | movs | resumen | ajustes }[tab]()
   └── enlazar()   ← re-vincula TODOS los listeners del contenido
 ```
 
-⚠️ **Gotcha principal:** cualquier elemento interactivo nuevo dentro de una vista queda muerto tras el siguiente `render()` a menos que se enganche dentro de `enlazar()` ([index.html:1034](index.html#L1034)). Los listeners inline en el HTML generado no sobreviven. Excepción: las hojas inferiores (`abrir()`) enganchan sus botones justo después de renderizarse, porque el sheet vive fuera de `#view` y no lo toca `render()`.
+⚠️ **Gotcha principal:** cualquier elemento interactivo nuevo dentro de una vista queda muerto tras el siguiente `render()` a menos que se enganche dentro de `enlazar()` ([index.html:1029](index.html#L1029)). Los listeners inline en el HTML generado no sobreviven. Excepción: las hojas inferiores (`abrir()`) enganchan sus botones justo después de renderizarse, porque el sheet vive fuera de `#view` y no lo toca `render()`.
 
-⚠️ **XSS:** todo se arma con template literals. Cualquier cadena del usuario (`concepto`, `nota`, categoría, concepto de abono) debe pasar por `esc()` ([index.html:354](index.html#L354)). Ojo: `aviso()` usa `textContent`, así que ahí **no** hay que escapar (sería doble escape).
+⚠️ **XSS:** todo se arma con template literals. Cualquier cadena del usuario (`concepto`, `nota`, categoría, país, concepto de abono) debe pasar por `esc()` ([index.html:368](index.html#L368)). Ojo: `aviso()` usa `textContent`, así que ahí **no** hay que escapar (sería doble escape).
 
 ### Vistas
 
-- `vInicio` ([index.html:591](index.html#L591)) — hero, **Gasto rápido** (`tarjetaRapido`, [index.html:562](index.html#L562)), empujón de bolsas por liquidar, y lista de hoy + 3 días.
-- `vMovs` ([index.html:621](index.html#L621)) — misma lista con chips de filtro.
-- `vResumen` ([index.html:630](index.html#L630)) — **tarjeta de Bolsas** (reservado/ejercido/disponible), gasto por categoría, corte por quincena, totales.
-- `vAjustes` ([index.html:699](index.html#L699)) — saldo inicial, tasas, botón de bolsas de Souvenirs, respaldo/restauración/reset.
+- `vInicio` ([index.html:580](index.html#L580)) — **tres bloques, en este orden**: hero (saldo real / disponible tras compromisos / desviación), `tarjetaRapido` (accesos rápidos del país), botón grande **Registrar gasto**, y `tarjetaFalta` (**Me falta pagar**, `por_pagar` y `a_medias` juntos, ordenados por fecha, tope de 12).
+- `vMovs` ([index.html:600](index.html#L600)) — filtros `[Me falta pagar] [Pagado] [Todo]`, el primero por defecto (`let filtro="falta"`).
+- `vResumen` ([index.html:608](index.html#L608)) — **una sola tabla** por categoría con planeado / pagado / falta, corte por quincena y totales. Ya no hay tarjeta de Bolsas aparte.
+- `vAjustes` ([index.html:660](index.html#L660)) — país actual, saldo inicial, tasas, administrar bolsas, respaldo/restauración/reset.
 
-`listaHTML` ([index.html:545](index.html#L545)) agrupa por día con encabezado sticky. **El saldo corrido se calcula sobre `orden()` completo, no sobre el subconjunto filtrado.**
+`listaHTML` ([index.html:528](index.html#L528)) agrupa por día con encabezado sticky. **El saldo corrido se calcula sobre `orden()` completo, no sobre el subconjunto filtrado.**
 
-`orden()` ([index.html:355](index.html#L355)) ordena por fecha y, a igualdad, pone **ingresos antes que gastos**.
+`orden()` ordena por fecha y, a igualdad, pone **ingresos antes que gastos**.
 
-⚠️ **Tres agregados necesitan conciencia de abonos**, o un movimiento a medio pagar reporta cero ejercido: el `real` por categoría, el "Sale" por quincena (usa `Math.abs(efectivo(m))`) y `gastadoViaje`. Todo cálculo nuevo que sume dinero debe usar `real()`/`proy()`/`gastoReal()`, nunca `montoReal ?? montoPlan` a pelo.
+### Interacción: un toque, una hoja
 
-### Interacción de cada fila
+**No hay botón ✓.** Un overlay `.hit` cubre la fila completa (`inset:0`) y abre `hojaMov` ([index.html:804](index.html#L804)), que es LA hoja para todo: ver planeado/pagado/falta, lista de abonos, **Abonar**, **Pagar el resto**, **Cerrar ya** (libera el remanente), **Editar**, y **Reabrir** si ya está pagado.
 
-Un overlay `.hit` cubre la fila **excepto** los 48px derechos.
+Las filas `a_medias` muestran el avance como texto (`Hogar · $13,425 de $26,850`) y llevan la guarda punteada en ámbar (`.row.medias`). Las filas con abonos tienen un botón `.expand` que despliega las sub-filas; cada sub-fila abre `hojaAbono` para editar o borrar ese abono.
 
-| Toque | Movimiento normal sin abonos | Con abonos | Bolsa |
-|---|---|---|---|
-| ✓ (derecha) | `hojaConfirmar` — dos caminos | `hojaBolsa` | `hojaBolsa` |
-| Cuerpo | `hojaEditar` | `hojaEditar` | `hojaBolsa` |
+Cerrar un movimiento **sin haber pagado nada** pide segundo toque: devolvería el plan completo como "ahorro".
 
-`hojaBolsa` ([index.html:891](index.html#L891)) es la hoja de pagos y sirve para ambos: cambia etiquetas y botones según `m.bolsa`.
+### Las hojas
 
-Las filas con abonos muestran el avance como texto (`Hogar · $13,425 de $26,850`) y un botón `.expand` que despliega las sub-filas. Las bolsas además llevan barra `.mini`; los movimientos normales **no** (deliberado: un renglón basta).
+- `hojaMov` — la única hoja de un movimiento (arriba).
+- `hojaAbono(mov, abono?, volver?, pre?)` ([index.html:708](index.html#L708)) — pide **una sola cosa: el monto**. Moneda, fecha y nota son enlaces discretos `.opts` **debajo del botón**, no campos. El botón **Abonar va antes** de nota y fecha para que el camino corto sea teclear → Abonar sin bajar la vista. `pre` precarga el faltante (lo usa "Pagar el resto").
+- `hojaRapido` ([index.html:857](index.html#L857)) — **Registrar gasto**: monto → categoría → Guardar. Nace **pagado**, con fecha de hoy y moneda del país actual. El concepto es opcional (por defecto, la categoría).
+- `hojaEditar` ([index.html:929](index.html#L929)) — concepto, fecha, plan, nota, categoría, tipo y el selector **Acceso rápido (bolsa)** que fija `bolsa` y `pais` de una vez.
+- `hojaBolsas` ([index.html:980](index.html#L980)) — asignar país a las bolsas existentes y crear las de Souvenirs que falten.
 
-### La hoja de abono
+## Pruebas
 
-`hojaAbono(mov, abono?, volver?)` ([index.html:791](index.html#L791)). En su forma mínima pide **una sola cosa: el monto**. Moneda, fecha y nota son enlaces discretos `.opts` **debajo del botón**, no campos; cada uno despliega su control al tocarlo. Las bolsas conservan la forma rica: atajos de monto (`ATAJOS`) y, si hay país, chips de moneda visibles.
+No hay suite versionada, pero **sí hay un arnés reproducible** (fuera del repo, en el scratchpad de la sesión). Lo que debe seguir pasando:
 
-El orden importa: el botón **Abonar va antes** de nota y fecha para que el camino corto sea teclear → Abonar sin bajar la vista.
+- **Regresión de la renta (obligatoria).** Abonar 13,425 a un plan de 26,850 **por la UI** debe dejar el movimiento en `a_medias`, visible en el filtro por defecto, **sin** clase `.ok`, mostrando "13,425 de 26,850", y con camino a un **segundo** abono desde la fila. Contra v1.3 esta prueba falla en 7 de 8 aserciones; ese es el punto.
+- **Neutralidad**: los tres números calculados con las fórmulas v1.3 congeladas contra las de v2, sobre un estado que cubre las cinco clases neutras.
+- **Idempotencia** de `migrar()` y **importación de respaldos v1.1 y v1.3**.
+- **País**: cambiarlo cambia los chips y la moneda por defecto; sin bolsas del país el bloque se oculta.
+- **Registrar gasto**: nace pagado, con la tasa del día y la moneda tecleada conservada en el abono.
+- **Filtros**: "Pagado" nunca contiene un `a_medias`.
+- **XSS**: concepto y nota maliciosos se ven como texto.
+- **Desbordamiento**: `scrollWidth === clientWidth` (medido en JS, no en la captura).
 
 ## Trampas conocidas
 
-- **Fechas:** `aDate()` ([index.html:351](index.html#L351)) parsea el ISO a mano en hora local. Nunca `new Date("2026-08-29")` — se interpreta como UTC y desplaza un día en México.
-- **Migración:** `migrar()` ([index.html:315](index.html#L315)) normaliza en memoria y corre en **dos puntos**: al cargar y al importar un respaldo. Es aritméticamente neutral: un respaldo viejo produce exactamente los mismos tres números que antes. Detecta bolsas legadas por el sufijo `(bolsa del bloque)` y convierte una bolsa ya confirmada en un abono sintético equivalente. Es idempotente.
-- **Bolsas de Souvenirs:** están en `SEED` pero la migración **no las inventa** en datos existentes. Se crean desde Ajustes (`hojaSouvenirs`, [index.html:991](index.html#L991)), con montos y fechas editables, omitiendo las que ya existan.
-- **El editor no crea bolsas.** `hojaEditar` ([index.html:939](index.html#L939)) muestra tramo y país sólo si `m.bolsa` ya es true. Crear bolsas es cosa de Ajustes.
-- **Liquidar una bolsa en cero pide segundo toque.** Devolvería la reserva completa como "ahorro".
-- **Reset conserva ajustes:** rehace `movs` desde `SEED` pero preserva `S.ajustes`.
-- **Validación de importación mínima:** `ajustes` presente, `movs` array, y por movimiento `id`, `fecha`, `montoPlan` numérico y `abonos` array si viene. Un respaldo anterior a v1.2 (sin abonos) sigue funcionando.
+- **Fechas:** `aDate()` ([index.html:365](index.html#L365)) parsea el ISO a mano en hora local. Nunca `new Date("2026-08-29")` — se interpreta como UTC y desplaza un día en México.
+- **Orden de definición:** `migrar()` usa `ejercido()` y `sync()`, así que la aritmética se define **antes** del bloque que carga `S` y llama a `migrar(S)`. Mover ese bloque hacia arriba rompe con un error de TDZ (`const` en zona muerta).
+- **Reset conserva ajustes:** rehace `movs` desde `SEED` pero preserva `S.ajustes` (incluido `paisActual`).
+- **Validación de importación mínima:** `ajustes` presente, `movs` array, y por movimiento `id`, `fecha`, `montoPlan` numérico y `abonos` array si viene. Un respaldo v1.x (sin `abonos`, sin `estado` nuevo) sigue funcionando.
 - **Exportar tiene tres niveles de fallback:** Web Share con archivo → descarga por `<a download>` → textarea. Pensado para iOS Safari.
 - **Cambio de día en caliente:** un listener de `visibilitychange` re-renderiza si la app estuvo en segundo plano y cambió la fecha.
 - **`VIAJE_INI` / `VIAJE_FIN`** sólo alimentan el chip de cuenta regresiva; no filtran ni afectan cálculos.
-- **`abiertos`** ([index.html:482](index.html#L482)) es un `Set` de ids desplegados; vive en memoria, no se persiste, y se limpia al importar o resetear.
+- **`abiertos`** ([index.html:489](index.html#L489)) es un `Set` de ids desplegados; vive en memoria, no se persiste, y se limpia al importar o resetear.
 
 ## Publicar
 

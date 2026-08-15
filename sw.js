@@ -1,6 +1,6 @@
 // v2 — stale-while-revalidate: abre siempre desde caché (offline garantizado)
 // y descarga la versión nueva en segundo plano para el siguiente arranque.
-const CACHE = "asia2026-v4";
+const CACHE = "asia2026-v5";
 const FILES = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {
