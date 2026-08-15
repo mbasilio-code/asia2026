@@ -169,6 +169,11 @@ textarea{font-family:var(--mono);font-size:12px;min-height:110px}
 .qk button .qn{font-size:11.5px;font-weight:600}
 .qk button .qv{font-size:11px;font-weight:600;color:var(--acc);font-family:var(--mono)}
 .qk button.off{opacity:.5}
+.opts{display:flex;gap:6px;justify-content:center;margin-top:12px}
+.opts button{background:none;border:none;color:var(--muted);font-size:12.5px;font-weight:600;
+  cursor:pointer;padding:5px 9px;border-radius:8px;max-width:40%;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.opts button:active{background:var(--line)}
 .atajos{display:flex;gap:6px;margin:-4px 0 14px}
 .atajos button{flex:1;padding:10px 3px;border-radius:10px;border:1px solid var(--line);
   background:transparent;color:var(--ink);font-family:var(--mono);font-size:12.5px;font-weight:600;cursor:pointer}
@@ -352,33 +357,57 @@ const quincena = iso => { const [y,m,d]=iso.split("-").map(Number); return y+"-"
 const diaCorto = iso => new Intl.DateTimeFormat("es-MX",{day:"numeric",month:"short"}).format(aDate(iso));
 const tramoTxt = m => (m.fechaInicio&&m.fechaFin) ? diaCorto(m.fechaInicio)+" – "+diaCorto(m.fechaFin) : fechaLarga(m.fecha);
 
-/* ---- bolsas: ejercido = suma de abonos, siempre en MXN ---- */
+/* ---- pagos por partes: ejercido = suma de abonos, siempre en MXN ---- */
 const ejercido  = m => (m.abonos||[]).reduce((a,x)=>a+(Number(x.monto)||0),0);
-const liquidada = m => m.bolsa && m.estado==="confirmado";
-const cerrado   = m => liquidada(m) ? (m.montoReal!=null ? m.montoReal : ejercido(m)) : 0;
+const conAbonos = m => Array.isArray(m.abonos) && m.abonos.length>0;
+/* CUALQUIER movimiento con abonos usa la aritmética de partes; una bolsa la usa
+   siempre, aunque todavía no tenga abonos (su reserva ya está comprometida). */
+const porPartes = m => m.bolsa || conAbonos(m);
+const cubierto  = m => porPartes(m) && m.estado==="confirmado";
+const cerrado   = m => m.montoReal!=null ? m.montoReal : ejercido(m);
 
 /* real(m): dinero que YA se movió, seguro.
    proy(m): lo que sigue comprometido ADEMÁS de real(m).
-   Una bolsa abierta aporta a los dos: lo abonado a real, lo no abonado a proy. */
-const real = m => m.bolsa
-  ? signo(m) * (liquidada(m) ? cerrado(m) : ejercido(m))
+   Un movimiento pagado a medias aporta a los dos: lo abonado a real, lo que
+   falta a proy. Renta de 26,850 con un abono de 13,425 → real −13,425, proy −13,425. */
+const real = m => porPartes(m)
+  ? signo(m) * (cubierto(m) ? cerrado(m) : ejercido(m))
   : (m.estado==="confirmado" ? signo(m)*(m.montoReal??m.montoPlan) : 0);
-const proy = m => m.bolsa
-  ? (liquidada(m) ? 0 : signo(m)*Math.max(0, m.montoPlan - ejercido(m)))
+const proy = m => porPartes(m)
+  ? (cubierto(m) ? 0 : signo(m)*Math.max(0, m.montoPlan - ejercido(m)))
   : (m.estado==="pendiente" ? signo(m)*m.montoPlan : 0);
-/* efectivo = real + proy → para una bolsa abierta da −max(plan, ejercido).
+/* efectivo = real + proy → −max(plan, ejercido) mientras siga abierto.
    Con eso el saldo corrido de listaHTML sigue funcionando sin cambios. */
 const efectivo = m => real(m) + proy(m);
-/* magnitud realmente gastada/recibida (0 si es un pendiente normal) */
+/* magnitud realmente gastada/recibida (0 si es un pendiente sin abonos) */
 const gastoReal = m => Math.abs(real(m));
 
-/* Regla A: el sobregiro de una bolsa abierta se reconoce en la desviación de
-   inmediato; el ahorro sólo al liquidar. */
-const desvDe = m => {
-  if(m.bolsa) return liquidada(m) ? signo(m)*(cerrado(m)-m.montoPlan)
-                                  : -Math.max(0, ejercido(m)-m.montoPlan);
-  return m.estado==="confirmado" ? signo(m)*((m.montoReal??m.montoPlan)-m.montoPlan) : 0;
-};
+/* Regla A: el sobregiro se reconoce en la desviación de inmediato;
+   el ahorro sólo al cerrar. */
+const desvDe = m => porPartes(m)
+  ? (cubierto(m) ? signo(m)*(cerrado(m)-m.montoPlan)
+                 : -Math.max(0, ejercido(m)-m.montoPlan))
+  : (m.estado==="confirmado" ? signo(m)*((m.montoReal??m.montoPlan)-m.montoPlan) : 0);
+
+/* Tras tocar los abonos de un movimiento normal: se cierra solo al quedar
+   cubierto y se vuelve a abrir si un abono se borra o se reduce.
+   Las bolsas NO: ahí el sobrante importa y se liquidan a mano. */
+function trasAbonar(m){
+  if(m.bolsa) return false;
+  const ej = ejercido(m);
+  if(m.estado==="pendiente"){
+    if(m.montoPlan>0 && ej>=m.montoPlan){
+      m.estado="confirmado"; m.montoReal=ej; m.moneda=null; m.montoLocal=null;
+      return true;
+    }
+    return false;
+  }
+  if(conAbonos(m)){
+    if(ej<m.montoPlan){ m.estado="pendiente"; m.montoReal=null; }
+    else m.montoReal=ej;
+  }
+  return false;
+}
 
 /* Resolutor de dos niveles. Devuelve {b, nivel} o null.
      vigente  → fechaInicio ≤ hoy ≤ fechaFin, gana la de fechaInicio más reciente
@@ -467,7 +496,7 @@ const subsHTML = b => b.abonos.slice()
   .map(a=>abonoHTML(b,a)).join("");
 
 function filaBolsaHTML(m, saldo){
-  const ej=ejercido(m), plan=m.montoPlan, liq=liquidada(m);
+  const ej=ejercido(m), plan=m.montoPlan, liq=cubierto(m);
   const disp = plan - ej;
   const total = liq ? cerrado(m) : Math.max(plan, ej);
   const pct = plan>0 ? Math.min(100, Math.round(ej/plan*100)) : (ej>0?100:0);
@@ -495,17 +524,22 @@ function filaHTML(m, saldo){
   const monto = m.estado==="confirmado" ? (m.montoReal??m.montoPlan) : m.montoPlan;
   const dif = m.estado==="confirmado" ? signo(m)*(monto-m.montoPlan) : 0;
   const cls = m.tipo==="ingreso" ? "pos" : "";
+  const parcial = conAbonos(m) && m.estado==="pendiente";
+  const n = m.abonos ? m.abonos.length : 0, exp = abiertos.has(m.id);
   let sub = m.categoria;
-  if(m.estado==="confirmado" && m.moneda && m.moneda!=="MXN" && m.montoLocal!=null) sub += " · "+m.montoLocal.toLocaleString("es-MX")+" "+m.moneda;
+  // avance de pagos parciales: un renglón de texto, sin barra
+  if(parcial) sub += " · "+fmt(ejercido(m))+" de "+fmt(m.montoPlan);
+  else if(m.estado==="confirmado" && m.moneda && m.moneda!=="MXN" && m.montoLocal!=null) sub += " · "+m.montoLocal.toLocaleString("es-MX")+" "+m.moneda;
   else if(m.estado==="confirmado" && dif!==0) sub += " · plan "+fmt(m.montoPlan);
   if(m.nota) sub += " · "+m.nota;
   return `<div class="row ${m.estado==="confirmado"?"ok":""}" data-id="${m.id}">
     <div class="stub"></div><div class="hit" data-act="editar"></div>
-    <div class="body"><div class="t">${esc(m.concepto)}</div><div class="m">${esc(sub)}</div></div>
+    <div class="body"><div class="t">${esc(m.concepto)}</div><div class="m">${esc(sub)}</div>
+      ${n?`<button class="expand" data-act="expand">${n} abono${n>1?"s":""} ${exp?"▴":"▾"}</button>`:""}</div>
     <div class="amt"><b class="${dif<0?"neg":cls}">${m.tipo==="ingreso"?"+":"−"}${fmt(monto).replace("-","")}</b>
       <span class="num">${fmt(saldo)}</span></div>
-    <button class="tick" data-act="tick" aria-label="Confirmar"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.2 5L20 6.5"/></svg></button>
-  </div>`;
+    <button class="tick" data-act="tick" aria-label="Pagar"><svg viewBox="0 0 24 24"><path d="M4 12.5l5.2 5L20 6.5"/></svg></button>
+  </div>${(exp&&n)?`<div class="subs">${subsHTML(m)}</div>`:""}`;
 }
 
 function listaHTML(movs){
@@ -624,7 +658,7 @@ function vResumen(){
     <div class="eyebrow" style="margin-bottom:12px">Bolsas · reservado vs. ejercido</div>
     <table class="tbl"><thead><tr><th>Bolsa</th><th>Reservado</th><th>Ejercido</th><th>Disponible</th></tr></thead><tbody>
     ${bols.map(m=>{
-      const ej=gastoReal(m), disp=m.montoPlan-ej, liq=liquidada(m);
+      const ej=gastoReal(m), disp=m.montoPlan-ej, liq=cubierto(m);
       const pct=m.montoPlan>0?Math.min(100,Math.round(ej/m.montoPlan*100)):(ej>0?100:0);
       return `<tr><td style="${liq?"color:var(--muted)":""}">${esc(m.concepto)}${liq?" ✓":""}
           <div class="ns" style="font-size:10px;color:var(--muted)">${tramoTxt(m)}</div>
@@ -693,7 +727,7 @@ function vAjustes(){
       <button class="btn danger" id="reset">Volver al plan original</button>
     </div>
   </div>
-  <div style="text-align:center;font-size:11px;color:var(--muted);padding:2px 0 10px">Asia 2026 · v1.2 · datos sólo en este dispositivo</div>`;
+  <div style="text-align:center;font-size:11px;color:var(--muted);padding:2px 0 10px">Asia 2026 · v1.3 · datos sólo en este dispositivo</div>`;
 }
 
 /* ---------------- acciones ---------------- */
@@ -706,15 +740,18 @@ function hojaConfirmar(m){
     <input class="big" type="number" inputmode="decimal" id="mreal" value="${ya?(m.moneda&&m.moneda!=="MXN"?m.montoLocal:m.montoReal):plan}">
     <div class="conv" id="conv"></div>
     <div class="acts">
-      <button class="btn" id="ok">${ya?"Guardar cambios":"Confirmar movimiento"}</button>
+      <button class="btn" id="ok">${ya?"Guardar cambios":"Pagar todo "+fmt(plan)}</button>
+      ${ya?"":`<button class="btn ghost" id="parte">Abonar una parte</button>`}
       ${ya?`<button class="btn ghost" id="undo">Marcar como pendiente</button>`:""}
       <button class="btn ghost" id="cx">Cancelar</button>
     </div>`);
   let mon = m.moneda||"MXN";
   const inp=document.getElementById("mreal"), conv=document.getElementById("conv");
+  const btnOk=document.getElementById("ok");
   const pinta=()=>{
-    const v=parseFloat(inp.value)||0, mxn=mon==="MXN"?v:v*S.ajustes.tasas[mon];
+    const v=parseFloat(inp.value)||0, mxn=mon==="MXN"?v:Math.round(v*S.ajustes.tasas[mon]);
     conv.textContent = mon==="MXN" ? "Pesos mexicanos" : `= ${fmt(mxn)} · tipo de cambio ${S.ajustes.tasas[mon]}`;
+    if(!ya) btnOk.textContent = (mxn===plan ? "Pagar todo " : "Pagar ") + fmt(mxn);
   };
   document.getElementById("mons").onclick=e=>{
     const b=e.target.closest("[data-mon]"); if(!b) return;
@@ -738,6 +775,7 @@ function hojaConfirmar(m){
     guardar(); cerrar(); render(); aviso("Confirmado");
   };
   document.getElementById("cx").onclick=cerrar;
+  if(!ya) document.getElementById("parte").onclick=()=>hojaAbono(m,null,false);
   if(ya) document.getElementById("undo").onclick=()=>{
     m.estado="pendiente"; m.montoReal=null; m.moneda=null; m.montoLocal=null;
     guardar(); cerrar(); render(); aviso("De vuelta a pendiente");
@@ -747,40 +785,69 @@ function hojaConfirmar(m){
 const chipsMonedaHTML = sel =>
   `<div class="chips" id="mons">${MONEDAS.map(x=>`<button class="chip ${x===sel?"on":""}" data-mon="${x}">${x}</button>`).join("")}</div>`;
 
-/* Captura rápida de un abono. Botón "Abonar" arriba de concepto y fecha a propósito:
-   el camino corto es chip de monto → Abonar, sin bajar ni teclear. */
+/* Abonar a CUALQUIER movimiento. En su forma mínima pide sólo el monto:
+   moneda, fecha y nota son enlaces discretos debajo del botón, no campos.
+   Las bolsas mantienen la forma rica (atajos de monto; chips visibles si hay país). */
 function hojaAbono(b, ab, volver){
   const nuevo = !ab;
   const hoy = hoyISO();
-  const fuera = !(b.fechaInicio && b.fechaFin && b.fechaInicio<=hoy && hoy<=b.fechaFin);
+  const conPais = !!b.pais;              // Souvenirs: la moneda del tramo se ve
+  const conAtajos = !!b.bolsa;           // captura de calle: montos frecuentes
+  const fuera = b.bolsa && !(b.fechaInicio && b.fechaFin && b.fechaInicio<=hoy && hoy<=b.fechaFin);
   ab = ab || {id:"a"+Date.now().toString(36)+Math.floor(Math.random()*46656).toString(36),
               fecha:hoy, monto:0, moneda:null, montoLocal:null, concepto:""};
   let mon = nuevo
-    ? (b.pais ? (MON_PAIS[b.pais]||"MXN") : (S.ajustes.monedaUltima||"MXN"))
+    ? (conPais ? (MON_PAIS[b.pais]||"MXN")
+               : (b.bolsa ? (S.ajustes.monedaUltima||"MXN") : "MXN"))
     : (ab.moneda||"MXN");
   if(!MONEDAS.includes(mon)) mon="MXN";
   const valIni = nuevo ? "" : (mon==="MXN" ? ab.monto : ab.montoLocal);
+  // en edición se despliega lo que ya trae valor propio
+  let verMon = conPais || (!nuevo && mon!=="MXN");
+  let verFec = !nuevo && ab.fecha!==hoy;
+  let verCon = !nuevo && !!ab.concepto;
+  const ej0 = ejercido(b);
+  const cap = b.bolsa
+    ? `${esc(b.concepto)} · ${tramoTxt(b)} · quedan ${fmt(b.montoPlan-ej0)}${fuera?` · <b class="warn">fuera de tramo</b>`:""}`
+    : `llevas ${fmt(ej0)} de ${fmt(b.montoPlan)}`;
   abrir(`
-    <h2>${nuevo?"Abonar a "+esc(b.categoria):"Editar abono"}</h2>
-    <div class="cap">${esc(b.concepto)} · ${tramoTxt(b)} · quedan ${fmt(b.montoPlan-ejercido(b))}${fuera?` · <b class="warn">fuera de tramo</b>`:""}</div>
-    ${chipsMonedaHTML(mon)}
+    <h2>${nuevo?"Abonar a "+esc(b.bolsa?b.categoria:b.concepto):"Editar abono"}</h2>
+    <div class="cap">${cap}</div>
+    <div id="a-monwrap" style="display:${verMon?"block":"none"}">${chipsMonedaHTML(mon)}</div>
     <input class="big" type="number" inputmode="decimal" id="a-mon" value="${valIni==null?"":valIni}" placeholder="0">
     <div class="conv" id="a-conv"></div>
-    <div class="atajos" id="a-at"></div>
-    <div class="acts" style="margin-bottom:16px"><button class="btn" id="a-ok">${nuevo?"Abonar":"Guardar abono"}</button></div>
-    <label><span class="lb">Concepto (opcional)</span><input id="a-con" value="${esc(ab.concepto||"")}" placeholder="Ramen, taxi…"></label>
-    <label><span class="lb">Fecha</span><input type="date" id="a-fec" value="${ab.fecha}"></label>
-    <div class="acts">
+    ${conAtajos?`<div class="atajos" id="a-at"></div>`:""}
+    <div class="acts"><button class="btn" id="a-ok">${nuevo?"Abonar":"Guardar abono"}</button></div>
+    <div class="opts">
+      <button type="button" id="o-mon">${mon} ▾</button>
+      <button type="button" id="o-fec">${ab.fecha===hoy?"Hoy":diaCorto(ab.fecha)} ▾</button>
+      <button type="button" id="o-con">${ab.concepto?esc(ab.concepto).slice(0,18):"+ nota"}</button>
+    </div>
+    <div id="a-fecwrap" style="display:${verFec?"block":"none"}">
+      <label style="margin-top:10px"><span class="lb">Fecha del pago</span><input type="date" id="a-fec" value="${ab.fecha}"></label></div>
+    <div id="a-conwrap" style="display:${verCon?"block":"none"}">
+      <label style="margin-top:10px"><span class="lb">Nota (opcional)</span><input id="a-con" value="${esc(ab.concepto||"")}" placeholder="Ramen, primera exhibición…"></label></div>
+    <div class="acts" style="margin-top:14px">
       ${nuevo?"":`<button class="btn danger" id="a-del">Eliminar abono</button>`}
-      <button class="btn ghost" id="a-cx">${volver?"Volver a la bolsa":"Cancelar"}</button>
+      <button class="btn ghost" id="a-cx">${volver?"Volver":"Cancelar"}</button>
     </div>`);
-  const inp=document.getElementById("a-mon"), conv=document.getElementById("a-conv"), at=document.getElementById("a-at");
+  const inp=document.getElementById("a-mon"), conv=document.getElementById("a-conv");
+  const at=document.getElementById("a-at");
+  const fecIn=document.getElementById("a-fec"), conIn=document.getElementById("a-con");
   const enMXN = () => { const v=parseFloat(inp.value)||0; return mon==="MXN" ? Math.round(v) : Math.round(v*S.ajustes.tasas[mon]); };
   const pinta = () => {
-    conv.textContent = mon==="MXN" ? "Pesos mexicanos" : `= ${fmt(enMXN())} · tipo de cambio ${S.ajustes.tasas[mon]}`;
-    at.innerHTML = (ATAJOS[mon]||[]).map(n=>`<button type="button" data-at="${n}">${n.toLocaleString("es-MX")}</button>`).join("");
-    at.querySelectorAll("[data-at]").forEach(x=>x.onclick=()=>{ inp.value=x.dataset.at; pinta(); });
+    conv.textContent = mon==="MXN" ? "" : `= ${fmt(enMXN())} · tipo de cambio ${S.ajustes.tasas[mon]}`;
+    document.getElementById("o-mon").textContent = mon+" ▾";
+    if(at){
+      at.innerHTML = (ATAJOS[mon]||[]).map(n=>`<button type="button" data-at="${n}">${n.toLocaleString("es-MX")}</button>`).join("");
+      at.querySelectorAll("[data-at]").forEach(x=>x.onclick=()=>{ inp.value=x.dataset.at; pinta(); });
+    }
   };
+  const toggle = (wrap, ver, foco) => { wrap.style.display = ver?"block":"none"; if(ver&&foco) foco.focus(); };
+  document.getElementById("o-mon").onclick=()=>{ verMon=!verMon; toggle(document.getElementById("a-monwrap"),verMon); };
+  document.getElementById("o-fec").onclick=()=>{ verFec=!verFec; toggle(document.getElementById("a-fecwrap"),verFec); };
+  document.getElementById("o-con").onclick=()=>{ verCon=!verCon; toggle(document.getElementById("a-conwrap"),verCon,conIn); };
+  fecIn.onchange=()=>{ document.getElementById("o-fec").textContent = (fecIn.value===hoy?"Hoy":diaCorto(fecIn.value))+" ▾"; };
   document.getElementById("mons").onclick=e=>{
     const t=e.target.closest("[data-mon]"); if(!t) return;
     const antes=mon; mon=t.dataset.mon;
@@ -799,41 +866,49 @@ function hojaAbono(b, ab, volver){
     ab.monto = enMXN();
     ab.moneda = mon;
     ab.montoLocal = mon==="MXN" ? null : v;
-    ab.concepto = document.getElementById("a-con").value.trim();
-    ab.fecha = document.getElementById("a-fec").value || hoy;
+    ab.concepto = conIn.value.trim();
+    ab.fecha = fecIn.value || hoy;
     if(nuevo) b.abonos.push(ab);
-    S.ajustes.monedaUltima = mon;   // la próxima vez arranca en esta moneda
+    if(mon!=="MXN" || b.bolsa) S.ajustes.monedaUltima = mon;
+    const cubre = trasAbonar(b);        // los movimientos normales se cierran solos
     guardar(); render();
-    aviso(`Abonado ${mon==="MXN"?fmt(ab.monto):v.toLocaleString("es-MX")+" "+mon} · quedan ${fmt(b.montoPlan-ejercido(b))}`);
-    if(volver) hojaBolsa(b); else cerrar();
+    const cuanto = mon==="MXN" ? fmt(ab.monto) : v.toLocaleString("es-MX")+" "+mon;
+    aviso(cubre ? b.concepto+" cubierta"     // aviso() usa textContent, no escapar aquí
+                : `Abonado ${cuanto} · quedan ${fmt(Math.max(0,b.montoPlan-ejercido(b)))}`);
+    if(cubre) cerrar(); else if(volver) hojaBolsa(b); else cerrar();
   };
   if(!nuevo) document.getElementById("a-del").onclick=()=>{
     b.abonos = b.abonos.filter(x=>x.id!==ab.id);
+    trasAbonar(b);
     guardar(); render(); aviso("Abono eliminado");
     if(volver) hojaBolsa(b); else cerrar();
   };
   document.getElementById("a-cx").onclick=()=>{ if(volver) hojaBolsa(b); else cerrar(); };
 }
 
+/* Hoja de pagos. Para una bolsa habla de reserva y liquidación; para un
+   movimiento normal con abonos, de plan y saldo pendiente. */
 function hojaBolsa(m){
-  const ej=ejercido(m), plan=m.montoPlan, disp=plan-ej, liq=liquidada(m);
+  const ej=ejercido(m), plan=m.montoPlan, disp=plan-ej, liq=cubierto(m), es=m.bolsa;
   const pct = plan>0 ? Math.min(100, Math.round(ej/plan*100)) : (ej>0?100:0);
   abrir(`
     <h2>${esc(m.concepto)}</h2>
-    <div class="cap">${tramoTxt(m)}${m.pais?" · "+esc(m.pais):""}${liq?" · liquidada":""}</div>
+    <div class="cap">${es?tramoTxt(m)+(m.pais?" · "+esc(m.pais):"")+(liq?" · liquidada":"")
+                       :fechaLarga(m.fecha)+(liq?" · cubierto":"")}</div>
     <div class="stats">
-      <div><div class="eyebrow">Reservado</div><div class="v num">${fmt(plan)}</div></div>
-      <div><div class="eyebrow">Ejercido</div><div class="v num">${fmt(ej)}</div></div>
-      <div><div class="eyebrow">Disponible</div><div class="v num ${disp<0?"neg":"pos"}">${fmt(disp)}</div></div>
+      <div><div class="eyebrow">${es?"Reservado":"Planeado"}</div><div class="v num">${fmt(plan)}</div></div>
+      <div><div class="eyebrow">${es?"Ejercido":"Pagado"}</div><div class="v num">${fmt(ej)}</div></div>
+      <div><div class="eyebrow">${es?"Disponible":"Falta"}</div><div class="v num ${disp<0?"neg":"pos"}">${fmt(disp)}</div></div>
     </div>
     <div class="bar" style="margin-bottom:16px"><i style="width:${pct}%;${disp<0?"background:var(--red)":""}"></i></div>
     ${m.abonos.length ? `<div class="rows" style="margin-bottom:16px">${subsHTML(m)}</div>`
                       : `<div class="empty" style="padding:12px 10px">Sin abonos todavía.</div>`}
     <div class="acts">
-      ${liq?"":`<button class="btn" id="b-ab">+ Abonar gasto</button>`}
-      ${liq?`<button class="btn ghost" id="b-re">Reabrir bolsa</button>`
-           :`<button class="btn ghost" id="b-liq">Liquidar bolsa (${fmtS(disp)})</button>`}
-      <button class="btn ghost" id="b-ed">Editar plan de la bolsa</button>
+      ${liq?"":`<button class="btn" id="b-ab">${es?"+ Abonar gasto":"+ Abonar pago"}</button>`}
+      ${es ? (liq?`<button class="btn ghost" id="b-re">Reabrir bolsa</button>`
+                 :`<button class="btn ghost" id="b-liq">Liquidar bolsa (${fmtS(disp)})</button>`)
+           : (liq?`<button class="btn ghost" id="b-re">Marcar como pendiente</button>`:"")}
+      <button class="btn ghost" id="b-ed">${es?"Editar plan de la bolsa":"Editar movimiento"}</button>
       <button class="btn ghost" id="b-cx">Cerrar</button>
     </div>`);
   sheet.querySelectorAll(".sub").forEach(s=>s.onclick=()=>{
@@ -841,18 +916,20 @@ function hojaBolsa(m){
   });
   if(!liq){
     document.getElementById("b-ab").onclick=()=>hojaAbono(m,null,true);
-    const bl=document.getElementById("b-liq");
-    let armado = ej>0;   // liquidar en cero pide una segunda confirmación
-    bl.onclick=()=>{
-      if(!armado){ armado=true; bl.textContent="Confirmar: liquidar sin gastar nada"; bl.classList.add("danger"); return; }
-      m.estado="confirmado"; m.montoReal=ej; m.montoLocal=null;
-      guardar(); cerrar(); render();
-      aviso(disp>=0 ? "Liquidada · ahorro "+fmt(disp) : "Liquidada · sobregiro "+fmt(-disp));
-    };
+    if(es){
+      const bl=document.getElementById("b-liq");
+      let armado = ej>0;   // liquidar en cero pide una segunda confirmación
+      bl.onclick=()=>{
+        if(!armado){ armado=true; bl.textContent="Confirmar: liquidar sin gastar nada"; bl.classList.add("danger"); return; }
+        m.estado="confirmado"; m.montoReal=ej; m.montoLocal=null;
+        guardar(); cerrar(); render();
+        aviso(disp>=0 ? "Liquidada · ahorro "+fmt(disp) : "Liquidada · sobregiro "+fmt(-disp));
+      };
+    }
   }else{
     document.getElementById("b-re").onclick=()=>{
       m.estado="pendiente"; m.montoReal=null;
-      guardar(); cerrar(); render(); aviso("Bolsa reabierta");
+      guardar(); cerrar(); render(); aviso(es?"Bolsa reabierta":"De vuelta a pendiente");
     };
   }
   document.getElementById("b-ed").onclick=()=>hojaEditar(m);
@@ -875,45 +952,34 @@ function hojaEditar(m){
       <label><span class="lb">Categoría</span><select id="e-cat">${CATS.map(c=>`<option ${c===m.categoria?"selected":""}>${c}</option>`).join("")}</select></label>
       <label><span class="lb">Tipo</span><select id="e-tip"><option value="gasto" ${m.tipo==="gasto"?"selected":""}>Gasto</option><option value="ingreso" ${m.tipo==="ingreso"?"selected":""}>Ingreso</option></select></label>
     </div>
-    <label style="display:flex;align-items:center;gap:9px;margin-bottom:12px">
-      <input type="checkbox" id="e-bol" ${m.bolsa?"checked":""} style="width:auto;flex:none">
-      <span style="font-size:13.5px">Es una bolsa (muchos pagos pequeños)</span>
-    </label>
-    <div id="e-bwrap" style="display:${m.bolsa?"block":"none"}">
-      <div class="grid2">
+    ${m.bolsa?`<div class="grid2">
         <label><span class="lb">Inicio del tramo</span><input type="date" id="e-bi" value="${m.fechaInicio||m.fecha}"></label>
         <label><span class="lb">Fin del tramo</span><input type="date" id="e-bf" value="${m.fechaFin||finQuincena(m.fechaInicio||m.fecha)}"></label>
       </div>
       <label><span class="lb">País (opcional · fija la moneda del abono)</span>
-        <select id="e-bp"><option value="">— sin país —</option>${Object.keys(MON_PAIS).map(p=>`<option ${p===m.pais?"selected":""}>${p}</option>`).join("")}</select></label>
-    </div>
+        <select id="e-bp"><option value="">— sin país —</option>${Object.keys(MON_PAIS).map(p=>`<option ${p===m.pais?"selected":""}>${p}</option>`).join("")}</select></label>`:""}
     <div class="acts">
       <button class="btn" id="e-ok">${nuevo?"Agregar movimiento":"Guardar cambios"}</button>
       ${nuevo?"":`<button class="btn danger" id="e-del">Eliminar ${m.bolsa?"bolsa":"movimiento"}</button>`}
       <button class="btn ghost" id="e-cx">Cancelar</button>
     </div>`);
-  const cb=document.getElementById("e-bol"), bw=document.getElementById("e-bwrap");
-  cb.onchange=()=>{ bw.style.display = cb.checked ? "block" : "none"; };
   document.getElementById("e-ok").onclick=()=>{
     const con=document.getElementById("e-con").value.trim();
     const mp=parseFloat(document.getElementById("e-mon").value);
     if(!con) return aviso("Falta el concepto");
     if(isNaN(mp)||mp<0) return aviso("Escribe un monto válido");
-    const esB=cb.checked;
-    if(!esB && m.abonos && m.abonos.length) return aviso("Tiene abonos: elimínalos antes de dejar de ser bolsa");
-    let bi=null, bf=null, bp=null;
-    if(esB){
-      bi=document.getElementById("e-bi").value; bf=document.getElementById("e-bf").value;
+    if(m.bolsa){   // el tramo sólo se edita en bolsas ya existentes; se crean desde Ajustes
+      const bi=document.getElementById("e-bi").value, bf=document.getElementById("e-bf").value;
       if(!bi||!bf) return aviso("La bolsa necesita inicio y fin de tramo");
       if(bf<bi) return aviso("El fin del tramo va después del inicio");
-      bp=document.getElementById("e-bp").value||null;
+      const bp=document.getElementById("e-bp").value||null;
+      m.fechaInicio=bi; m.fechaFin=bf; m.pais=bp; m.moneda = bp?MON_PAIS[bp]:null; m.montoLocal=null;
     }
     m.concepto=con; m.fecha=document.getElementById("e-fec").value;
     m.nota=document.getElementById("e-nota").value.trim(); m.montoPlan=mp;
     m.categoria=document.getElementById("e-cat").value; m.tipo=document.getElementById("e-tip").value;
-    m.bolsa=esB; m.fechaInicio=bi; m.fechaFin=bf; m.pais=bp;
-    if(esB){ if(!Array.isArray(m.abonos)) m.abonos=[]; m.moneda = bp?MON_PAIS[bp]:null; m.montoLocal=null; }
-    if(nuevo) S.movs.push(m);
+    if(!Array.isArray(m.abonos)) m.abonos=[];
+    if(nuevo) S.movs.push(m); else trasAbonar(m);   // cambiar el plan puede cubrirlo o destaparlo
     guardar(); cerrar(); render(); aviso(nuevo?"Movimiento agregado":"Cambios guardados");
   };
   if(!nuevo) document.getElementById("e-del").onclick=()=>{
@@ -976,7 +1042,8 @@ function enlazar(){
     const a=b.abonos.find(x=>String(x.id)===s.dataset.aid); if(a) hojaAbono(b,a,false); });
   view.querySelectorAll(".row").forEach(r=>{
     const m=S.movs.find(x=>x.id===r.dataset.id); if(!m) return;
-    r.querySelector('[data-act="tick"]').onclick=e=>{e.stopPropagation(); m.bolsa?hojaBolsa(m):hojaConfirmar(m);};
+    // con abonos ya registrados el ✓ abre la hoja de pagos; si no, la de confirmar
+    r.querySelector('[data-act="tick"]').onclick=e=>{e.stopPropagation(); porPartes(m)?hojaBolsa(m):hojaConfirmar(m);};
     r.querySelector('.hit').onclick=()=>{ m.bolsa?hojaBolsa(m):hojaEditar(m); };
     const ex=r.querySelector('[data-act="expand"]');
     if(ex) ex.onclick=e=>{ e.stopPropagation();
