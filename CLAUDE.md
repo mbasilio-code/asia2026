@@ -65,11 +65,11 @@ Otros detalles que cuestan tiempo si se redescubren:
 
 | Dónde | Valor actual | Qué es | Cuándo se sube |
 |---|---|---|---|
-| [sw.js:3](sw.js#L3) `CACHE` | `asia2026-v5` | Nombre de la Cache Storage | **En cada cambio a `index.html`** |
-| [index.html:223](index.html#L223) `KEY` | `asia2026-v1` | Clave de `localStorage` | **Casi nunca** — ver abajo |
-| [index.html:698](index.html#L698) | `v2.0` | Cadena visible en Ajustes | Manual, cosmético |
+| [sw.js:3](sw.js#L3) `CACHE` | `asia2026-v6` | Nombre de la Cache Storage | **En cada cambio a `index.html`** |
+| [index.html:231](index.html#L231) `KEY` | `asia2026-v1` | Clave de `localStorage` | **Casi nunca** — ver abajo |
+| [index.html:757](index.html#L757) | `v2.1` | Cadena visible en Ajustes | Manual, cosmético |
 
-⚠️ **`KEY` no es una versión de caché.** Es dónde viven los datos del usuario. Cambiarla equivale a borrarle todos sus movimientos: la app no encuentra estado previo y cae en `nuevoEstado()`. Los cambios de esquema se resuelven con `migrar()`, no tocando `KEY`. La similitud de nombres entre `asia2026-v1` y `asia2026-v5` es una trampa fácil.
+⚠️ **`KEY` no es una versión de caché.** Es dónde viven los datos del usuario. Cambiarla equivale a borrarle todos sus movimientos: la app no encuentra estado previo y cae en `nuevoEstado()`. Los cambios de esquema se resuelven con `migrar()`, no tocando `KEY`. La similitud de nombres entre `asia2026-v1` y `asia2026-v6` es una trampa fácil.
 
 ## Modelo de datos
 
@@ -96,8 +96,16 @@ Cada movimiento:
   nota,
   bolsa: false,        // etiqueta: sale en accesos rápidos. Nada más.
   pais,                // de qué país es la bolsa (null = no sale en accesos rápidos)
-  fechaInicio, fechaFin }   // informativos; NO deciden nada
+  fechaInicio,         // FECHA DE RESERVA de una bolsa (ver abajo); null si no es bolsa
+  fechaFin }           // informativo
 ```
+
+`fecha` es cuándo se gasta; `fechaInicio` es cuándo el dinero **deja de estar
+disponible**. `fechaRes(m) = m.fechaInicio || m.fecha` ([index.html:382](index.html#L382))
+es la clave de orden del libro. No hay campo `fechaReserva` a propósito: duplicar
+un dato que `fechaInicio` ya guarda es la clase de error que causó el bug de v2.0
+(`montoReal` contra `abonos`). Tampoco hay regla de quincena en el código — sería
+falsa para las bolsas de Souvenirs, que van por tramo de país.
 
 Cada abono:
 
@@ -154,7 +162,38 @@ const desvDe   = m => esPagado(m) ? signo(m)*(ejercido(m)-m.montoPlan)
 
 Un movimiento a medias aporta **a los dos lados**: lo abonado a real, lo que falta a proyectado. Por eso **abonar no mueve el saldo proyectado**: cada peso que sale de caja sale también de lo comprometido. Es la propiedad que hace correcto todo el modelo.
 
-`efectivo()` vale `−max(plan, ejercido)` mientras algo siga abierto, que es justo lo que necesita el saldo corrido de `listaHTML`.
+`efectivo()` vale `−max(plan, ejercido)` mientras algo siga abierto: la salida
+total del movimiento. Lo consume el corte por quincena de `vResumen`, que sí
+quiere la salida total del periodo. **Ya no alimenta ningún saldo por fila.**
+
+### Las dos cifras verificables (y por qué no hay saldo corrido)
+
+```js
+saldoReal()  = saldoInicial + Σ real(m)          // lo que hay en la bolsa ahora
+disponible() = saldoReal() + Σ proy(m)           // menos todo lo comprometido y sin pagar
+```
+
+`disponible()` ([index.html:459](index.html#L459)) es **la única definición**: la
+usan el hero del Dashboard y la tira de Movimientos, así que no pueden discrepar
+(hay prueba, C1).
+
+⚠️ **El disponible es invariante ante cualquier abono.** Al pagar `f`, el saldo
+real baja `f` **y** el compromiso baja `f`: `Δ = −f + f = 0`. Sólo se mueve con
+sorpresas — baja al sobregirarse, sube al cerrar algo liberando su remanente.
+
+Ésa es la propiedad que hace que **el dinero de una bolsa nunca se vea
+disponible**: se descuenta desde que la bolsa existe, sin importar su fecha. Es
+más fuerte que "reservado desde el inicio de la quincena".
+
+**Por eso no hay saldo corrido bajo cada fila, y no hay que reponerlo.** Hasta
+v2.0 `listaHTML` acumulaba `efectivo(m)` en orden de fecha, lo que producía un
+número que: contaba el plan completo de lo ya abonado a medias, daba por
+recibidos ingresos pendientes, **no restaba nada posterior a esa fecha** (de ahí
+que el dinero de las bolsas de septiembre se viera disponible en agosto), y era
+una proyección a una fecha mientras el hero es de hoy. Un "disponible" por fila
+sería la misma constante repetida; cualquier variante no constante reintroduce
+la trampa. Se sustituyó por una sola cifra etiquetada arriba de la lista
+(`tiraDisponible`, [index.html:593](index.html#L593)).
 
 **Regla A para el sobregiro:** pagar de más se reconoce en la desviación de inmediato; el ahorro sólo al cerrar. Si no, el proyectado ya habría absorbido el golpe mientras la desviación seguiría diciendo "vas en plan".
 
@@ -225,20 +264,27 @@ render()  ([index.html:481](index.html#L481))
 
 ### Vistas
 
-- `vInicio` ([index.html:580](index.html#L580)) — **tres bloques, en este orden**: hero (saldo real / disponible tras compromisos / desviación), `tarjetaRapido` (accesos rápidos del país), botón grande **Registrar gasto**, y `tarjetaFalta` (**Me falta pagar**, `por_pagar` y `a_medias` juntos, ordenados por fecha, tope de 12).
-- `vMovs` ([index.html:600](index.html#L600)) — filtros `[Me falta pagar] [Pagado] [Todo]`, el primero por defecto (`let filtro="falta"`).
-- `vResumen` ([index.html:608](index.html#L608)) — **una sola tabla** por categoría con planeado / pagado / falta, corte por quincena y totales. Ya no hay tarjeta de Bolsas aparte.
-- `vAjustes` ([index.html:660](index.html#L660)) — país actual, saldo inicial, tasas, administrar bolsas, respaldo/restauración/reset.
+- `vInicio` ([index.html:638](index.html#L638)) — **tres bloques, en este orden**: hero (saldo real / disponible tras compromisos / desviación), `tarjetaRapido` (accesos rápidos del país), botón grande **Registrar gasto**, y `tarjetaFalta` (**Me falta pagar**, `por_pagar` y `a_medias` juntos, tope de 12). Su titular es `falta(m)`.
+- `vMovs` ([index.html:658](index.html#L658)) — `tiraDisponible()`, luego filtros `[Me falta pagar] [Pagado] [Todo]`, el primero por defecto (`let filtro="falta"`).
+- `vResumen` ([index.html:667](index.html#L667)) — **una sola tabla** por categoría con planeado / pagado / falta, corte por quincena y totales. Ya no hay tarjeta de Bolsas aparte. El corte por quincena sigue usando `m.fecha` (es un reporte de gasto, no de reserva).
+- `vAjustes` ([index.html:719](index.html#L719)) — país actual, saldo inicial, tasas, administrar bolsas, respaldo/restauración/reset.
 
-`listaHTML` ([index.html:528](index.html#L528)) agrupa por día con encabezado sticky. **El saldo corrido se calcula sobre `orden()` completo, no sobre el subconjunto filtrado.**
+`listaHTML` ([index.html:571](index.html#L571)) agrupa por **fecha de reserva**
+(`fechaRes`) con encabezado sticky; cada encabezado muestra lo que falta pagar
+ese día, etiquetado.
 
-`orden()` ordena por fecha y, a igualdad, pone **ingresos antes que gastos**.
+`orden()` ([index.html:383](index.html#L383)) ordena por `fechaRes(m)` y, a
+igualdad, pone **ingresos antes que gastos**.
+
+⚠️ **Todo número visible lleva etiqueta.** La columna derecha de cada fila dice
+`FALTA` / `PAGADO` / `POR COBRAR` bajo el monto. Un número sin encabezado en esa
+posición se lee como "saldo", que es exactamente el malentendido que costó v2.1.
 
 ### Interacción: un toque, una hoja
 
 **No hay botón ✓.** Un overlay `.hit` cubre la fila completa (`inset:0`) y abre `hojaMov` ([index.html:804](index.html#L804)), que es LA hoja para todo: ver planeado/pagado/falta, lista de abonos, **Abonar**, **Pagar el resto**, **Cerrar ya** (libera el remanente), **Editar**, y **Reabrir** si ya está pagado.
 
-Las filas `a_medias` muestran el avance como texto (`Hogar · $13,425 de $26,850`) y llevan la guarda punteada en ámbar (`.row.medias`). Las filas con abonos tienen un botón `.expand` que despliega las sub-filas; cada sub-fila abre `hojaAbono` para editar o borrar ese abono.
+El titular de cada fila es **siempre el remanente** (`falta(m)`) mientras siga abierta, y lo pagado cuando cierra. **Nunca el plan**: mostrar el plan de un movimiento a medias fue el bug de v2.1 (la Renta decía 25,662 cuando faltaban 8,500). El plan sigue visible como contexto en el renglón de avance (`Hogar · pagado $17,162 de $25,662`), y la fila lleva la guarda punteada en ámbar (`.row.medias`). Las filas con abonos tienen un botón `.expand` que despliega las sub-filas; cada sub-fila abre `hojaAbono` para editar o borrar ese abono.
 
 Cerrar un movimiento **sin haber pagado nada** pide segundo toque: devolvería el plan completo como "ahorro".
 
@@ -263,6 +309,16 @@ No hay suite versionada, pero **sí hay un arnés reproducible** (fuera del repo
 - **XSS**: concepto y nota maliciosos se ven como texto.
 - **Desbordamiento**: `scrollWidth === clientWidth` (medido en JS, no en la captura).
 
+Consistencia del disponible (v2.1), todas sobre el DOM renderizado:
+
+- **C1**: la tira de Movimientos **es idéntica** al "Disponible tras compromisos" del Dashboard, y ambas a `disponible()`.
+- **C2**: `saldoReal() − Σ falta(gastos abiertos) + Σ falta(ingresos abiertos) === disponible()`.
+- **C3**: caso reportado — plan 25,662 con 17,162 abonados ⇒ el titular de la fila dice **8,500**, jamás 25,662, y la columna está etiquetada.
+- **C4**: abonar 1, 500, 4,250 u 8,500 **no mueve** el disponible.
+- **C5**: sobregirarse **sí** lo baja por el exceso; "Cerrar ya" **sí** lo sube por el remanente liberado.
+- **C6**: barrido del DOM en Inicio y Movimientos — ningún titular muestra el plan de un `a_medias`.
+- **C7**: `fechaRes()` ordena por reserva y es **no-op** mientras `fechaInicio === fecha`.
+
 ## Trampas conocidas
 
 - **Fechas:** `aDate()` ([index.html:365](index.html#L365)) parsea el ISO a mano en hora local. Nunca `new Date("2026-08-29")` — se interpreta como UTC y desplaza un día en México.
@@ -272,7 +328,8 @@ No hay suite versionada, pero **sí hay un arnés reproducible** (fuera del repo
 - **Exportar tiene tres niveles de fallback:** Web Share con archivo → descarga por `<a download>` → textarea. Pensado para iOS Safari.
 - **Cambio de día en caliente:** un listener de `visibilitychange` re-renderiza si la app estuvo en segundo plano y cambió la fecha.
 - **`VIAJE_INI` / `VIAJE_FIN`** sólo alimentan el chip de cuenta regresiva; no filtran ni afectan cálculos.
-- **`abiertos`** ([index.html:489](index.html#L489)) es un `Set` de ids desplegados; vive en memoria, no se persiste, y se limpia al importar o resetear.
+- **`abiertos`** es un `Set` de ids desplegados; vive en memoria, no se persiste, y se limpia al importar o resetear.
+- **No reintroducir un saldo corrido por fila** sin leer antes la sección "Las dos cifras verificables". Parece una mejora obvia y es justo el número que confundió al usuario en v2.0.
 
 ## Publicar
 

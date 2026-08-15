@@ -61,6 +61,12 @@ header .sub{font-size:11px;color:var(--muted);margin-top:3px;
 .dayhead{display:flex;justify-content:space-between;align-items:baseline;padding:0 4px 6px;position:sticky;top:0;background:var(--bg);z-index:2}
 .dayhead .d{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
 .dayhead .s{font-size:11px;color:var(--muted)}
+.dayhead .s b{font-weight:600;color:var(--ink)}
+/* tira de disponible: la única cifra verificable de la lista */
+.tira{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:14px 16px}
+.tira .big2{font-size:27px;font-weight:600;line-height:1.1;margin-top:3px}
+.tira .tr{text-align:right}
+.tira .tr .num{font-size:14px;font-weight:600;margin-top:3px}
 .rows{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
 .row{display:flex;align-items:center;gap:10px;padding:11px 12px 11px 0;border-bottom:1px solid var(--line);position:relative}
 .row:last-child{border-bottom:none}
@@ -73,7 +79,9 @@ header .sub{font-size:11px;color:var(--muted);margin-top:3px;
 .row .m{font-size:11px;color:var(--muted);margin-top:1px}
 .row .amt{text-align:right;flex:none}
 .row .amt b{font-size:14px;font-weight:600;display:block}
-.row .amt span{font-size:10px;color:var(--muted);display:block;margin-top:1px}
+/* etiqueta de qué es el número: antes era un saldo sin encabezado */
+.row .amt span{font-size:9.5px;color:var(--muted);display:block;margin-top:1px;
+  letter-spacing:.06em;text-transform:uppercase;font-weight:600}
 /* toda la fila es tocable: ya no hay ✓ separado del cuerpo */
 .hit{position:absolute;inset:0;cursor:pointer}
 .row.medias .stub{background:repeating-linear-gradient(to bottom,var(--amber) 0 4px,transparent 4px 8px)}
@@ -366,7 +374,16 @@ const aDate = iso => { const [y,m,d]=iso.split("-").map(Number); return new Date
 const fechaLarga = iso => new Intl.DateTimeFormat("es-MX",{weekday:"short",day:"numeric",month:"short"}).format(aDate(iso));
 const signo = m => m.tipo==="ingreso" ? 1 : -1;
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const orden = () => S.movs.slice().sort((a,b)=> a.fecha===b.fecha ? (signo(b)-signo(a)) : a.fecha.localeCompare(b.fecha));
+/* Fecha de RESERVA: cuándo el dinero deja de estar disponible, que no siempre es
+   cuándo se gasta. Una bolsa se reserva al abrir su tramo (`fechaInicio`, que ya
+   existe y ya trae el valor correcto tanto para quincenas como para tramos de
+   país); todo lo demás se reserva en su fecha. Sin campo nuevo y sin ninguna
+   regla de quincena incrustada en el código. */
+const fechaRes = m => m.fechaInicio || m.fecha;
+const orden = () => S.movs.slice().sort((a,b)=>{
+  const fa=fechaRes(a), fb=fechaRes(b);
+  return fa===fb ? (signo(b)-signo(a)) : fa.localeCompare(fb);
+});
 const quincena = iso => { const [y,m,d]=iso.split("-").map(Number); return y+"-"+String(m).padStart(2,"0")+"-Q"+(d<15?1:2); };
 const diaCorto = iso => new Intl.DateTimeFormat("es-MX",{day:"numeric",month:"short"}).format(aDate(iso));
 
@@ -428,11 +445,24 @@ const bolsasDelPais = (p) => S.movs
 /* lo que falta pagar, en una sola lista: por_pagar y a_medias juntos */
 const porPagar = () => orden().filter(m => abierto(m) && m.tipo==="gasto");
 
+/* ---- las dos cifras que el usuario puede verificar ----
+   saldoReal   = lo que hay en la bolsa ahora
+   disponible  = saldoReal menos TODO lo que sigue comprometido y sin pagar
+
+   `disponible()` es la única definición: la usan el Dashboard y la tira de
+   Movimientos, así que no pueden discrepar. Es invariante ante cualquier abono
+   (pagar baja el saldo real y baja el compromiso en la misma cantidad); sólo se
+   mueve al sobregirarse o al cerrar algo liberando su remanente. Ésa es la
+   propiedad que hace que el dinero de una bolsa NUNCA se vea disponible: se
+   descuenta desde que la bolsa existe, sin importar su fecha. */
+const saldoReal  = () => S.ajustes.saldoInicial + S.movs.reduce((a,m)=>a+real(m),0);
+const disponible = () => saldoReal() + S.movs.reduce((a,m)=>a+proy(m),0);
+
 function calc(){
-  const saldoReal = S.ajustes.saldoInicial + S.movs.reduce((a,m)=>a+real(m),0);
-  const saldoProy = saldoReal + S.movs.reduce((a,m)=>a+proy(m),0);
+  const saldoReal_ = saldoReal();
+  const saldoProy = disponible();
   const desv = S.movs.reduce((a,m)=>a+desvDe(m), 0);
-  return { saldoReal, saldoProy, desv,
+  return { saldoReal: saldoReal_, saldoProy, desv,
            pagados: S.movs.filter(esPagado).length,
            abiertos: S.movs.filter(abierto).length,
            gastadoViaje: S.movs.filter(m=>m.tipo==="gasto"&&m.categoria!=="Hogar")
@@ -505,13 +535,18 @@ const subsHTML = b => b.abonos.slice()
 /* UNA sola fila para todo: bolsas y gastos son lo mismo.
    Toda la fila es tocable y abre hojaMov. No hay botón ✓ ni overlay parcial:
    ese ✓ separado del cuerpo era la mitad de la confusión que causó el bug. */
-function filaHTML(m, saldo){
+/* El titular de la fila es SIEMPRE el remanente mientras algo siga abierto, y lo
+   pagado cuando ya cerró. Nunca el plan: mostrar el plan de un movimiento a
+   medias es lo que hacía que la Renta dijera 25,662 cuando faltaban 8,500.
+   Debajo va la etiqueta de qué es ese número, no un saldo sin encabezado. */
+function filaHTML(m){
   const ej=ejercido(m), plan=m.montoPlan, pag=esPagado(m), dif=ej-plan;
-  const total = pag ? ej : Math.max(plan, ej);
+  const titular = pag ? ej : falta(m);
+  const etiqueta = pag ? "pagado" : (m.tipo==="ingreso" ? "por cobrar" : "falta");
   const n = m.abonos ? m.abonos.length : 0, exp = abiertos.has(m.id);
   const cls = m.tipo==="ingreso" ? "pos" : "";
   let sub = m.categoria;
-  if(aMedias(m))       sub += " · "+fmt(ej)+" de "+fmt(plan);   // el renglón clave
+  if(aMedias(m))        sub += " · pagado "+fmt(ej)+" de "+fmt(plan);   // el renglón clave
   else if(pag && dif>0) sub += " · sobregiro "+fmt(dif);
   else if(pag && dif<0) sub += " · ahorro "+fmt(-dif);
   if(m.bolsa) sub += " · bolsa"+(m.pais?" "+m.pais:"");
@@ -520,26 +555,50 @@ function filaHTML(m, saldo){
     <div class="stub"></div><div class="hit" data-act="abrir"></div>
     <div class="body"><div class="t">${esc(m.concepto)}</div><div class="m">${esc(sub)}</div>
       ${n?`<button class="expand" data-act="expand">${n} abono${n>1?"s":""} ${exp?"▴":"▾"}</button>`:""}</div>
-    <div class="amt"><b class="${dif>0&&pag?"neg":cls}">${m.tipo==="ingreso"?"+":"−"}${fmt(total).replace("-","")}</b>
-      <span class="num">${fmt(saldo)}</span></div>
+    <div class="amt"><b class="${dif>0&&pag?"neg":cls}">${m.tipo==="ingreso"?"+":"−"}${fmt(titular).replace("-","")}</b>
+      <span>${etiqueta}</span></div>
   </div>${(exp&&n)?`<div class="subs">${subsHTML(m)}</div>`:""}`;
 }
 
+/* Se agrupa por fecha de RESERVA, no de gasto: una bolsa aparece el día en que
+   su dinero deja de estar disponible.
+
+   Ya no hay saldo corrido por fila. Era una proyección a la fecha de cada
+   movimiento: contaba el plan completo de lo ya abonado, daba por recibidos
+   ingresos pendientes, y sobre todo NO restaba nada posterior a esa fecha, así
+   que el dinero de las bolsas de septiembre se veía disponible en agosto. El
+   número que sí se puede verificar es uno solo, el disponible, y va arriba. */
 function listaHTML(movs){
   if(!movs.length) return `<div class="card"><div class="empty">Nada por aquí todavía.<br>Usa el botón + para registrar un movimiento.</div></div>`;
-  // saldo corrido sobre TODOS los movimientos, en orden
-  const saldos={}, cierre={}; let s=S.ajustes.saldoInicial;
-  orden().forEach(m=>{ s+=efectivo(m); saldos[m.id]=s; cierre[m.fecha]=s; });
+  // lo que falta por pagar en cada día, para el encabezado
+  const porDia = {};
+  movs.forEach(m=>{ const d=fechaRes(m); porDia[d]=(porDia[d]||0)+(m.tipo==="gasto"?falta(m):0); });
   let out="", dia=null;
   movs.forEach(m=>{
-    if(m.fecha!==dia){
+    const d = fechaRes(m);
+    if(d!==dia){
       if(dia) out+="</div></div>";
-      dia=m.fecha;
-      out+=`<div class="daygroup"><div class="dayhead"><span class="d">${fechaLarga(dia)}</span><span class="s num">${fmt(cierre[dia])}</span></div><div class="rows">`;
+      dia=d;
+      out+=`<div class="daygroup"><div class="dayhead"><span class="d">${fechaLarga(dia)}</span>`
+         + `<span class="s">${porDia[dia]>0?"falta <b class=\"num\">"+fmt(porDia[dia])+"</b>":"al día"}</span>`
+         + `</div><div class="rows">`;
     }
-    out+=filaHTML(m,saldos[m.id]);
+    out+=filaHTML(m);
   });
   return out+"</div></div>";
+}
+
+/* La única cifra verificable de la lista, etiquetada. Sale de disponible(), la
+   misma función que alimenta el Dashboard, así que no pueden discrepar. */
+function tiraDisponible(){
+  const d = disponible(), pend = S.movs.filter(m=>abierto(m)&&m.tipo==="gasto")
+                                       .reduce((a,m)=>a+falta(m),0);
+  return `<div class="card tira">
+    <div><div class="eyebrow">Disponible tras compromisos</div>
+      <div class="big2 num ${d<0?"neg":""}">${fmt(d)}</div></div>
+    <div class="tr"><div class="eyebrow">Falta pagar</div>
+      <div class="num">${fmt(pend)}</div></div>
+  </div>`;
 }
 
 /* Accesos rápidos del país seleccionado. Si estás en México y no hay bolsas
@@ -568,10 +627,9 @@ function tarjetaFalta(){
     <div class="eyebrow" style="margin-bottom:10px">Me falta pagar</div>
     ${ms.slice(0,12).map(m=>`<button class="nrow" data-mov="${m.id}">
       <span><span class="nt">${esc(m.concepto)}</span>
-        <span class="ns">${diaCorto(m.fecha)} · ${esc(m.categoria)}${aMedias(m)?" · a medias":""}</span></span>
-      <span class="num" style="font-weight:600;white-space:nowrap">${
-        aMedias(m) ? fmt(ejercido(m))+" <span style=\"color:var(--muted);font-weight:400\">de "+fmt(m.montoPlan)+"</span>"
-                   : fmt(m.montoPlan)}</span>
+        <span class="ns">${diaCorto(fechaRes(m))} · ${esc(m.categoria)}${
+          aMedias(m)?" · pagado "+fmt(ejercido(m))+" de "+fmt(m.montoPlan):""}</span></span>
+      <span class="num" style="font-weight:600;white-space:nowrap">${fmt(falta(m))}</span>
     </button>`).join("")}
     ${ms.length>12?`<div class="ns" style="text-align:center;padding-top:10px;color:var(--muted)">y ${ms.length-12} más en Movimientos</div>`:""}
   </div>`;
@@ -600,7 +658,8 @@ const FILTROS = [["falta","Me falta pagar"],["pagado","Pagado"],["todo","Todo"]]
 function vMovs(){
   const movs = orden().filter(m => filtro==="todo" ? true
                                  : filtro==="pagado" ? esPagado(m) : abierto(m));
-  return `<div class="chips">
+  return `${tiraDisponible()}
+    <div class="chips">
       ${FILTROS.map(([k,t])=>`<button class="chip ${filtro===k?"on":""}" data-f="${k}">${t}</button>`).join("")}
     </div>${listaHTML(movs)}`;
 }
@@ -695,7 +754,7 @@ function vAjustes(){
       <button class="btn danger" id="reset">Volver al plan original</button>
     </div>
   </div>
-  <div style="text-align:center;font-size:11px;color:var(--muted);padding:2px 0 10px">Asia 2026 · v2.0 · datos sólo en este dispositivo</div>`;
+  <div style="text-align:center;font-size:11px;color:var(--muted);padding:2px 0 10px">Asia 2026 · v2.1 · datos sólo en este dispositivo</div>`;
 }
 
 /* ---------------- acciones ---------------- */
@@ -949,11 +1008,19 @@ function hojaEditar(m){
         <option value="" ${!m.bolsa?"selected":""}>No</option>
         ${PAISES.map(p=>`<option value="${esc(p)}" ${m.bolsa&&m.pais===p?"selected":""}>Sí, en ${esc(p)}</option>`).join("")}
       </select></label>
+    <div id="e-reswrap" style="display:${m.bolsa?"block":"none"}">
+      <label><span class="lb">Fecha de reserva</span>
+        <input type="date" id="e-res" value="${m.fechaInicio||m.fecha}">
+        <span class="dd" style="display:block;margin-top:4px">Desde este día el dinero deja de verse disponible, aunque lo gastes después.</span>
+      </label></div>
     <div class="acts">
       <button class="btn" id="e-ok">${nuevo?"Agregar movimiento":"Guardar cambios"}</button>
       ${nuevo?"":`<button class="btn danger" id="e-del">Eliminar movimiento</button>`}
       <button class="btn ghost" id="e-cx">Cancelar</button>
     </div>`);
+  document.getElementById("e-bp").onchange=e=>{
+    document.getElementById("e-reswrap").style.display = e.target.value ? "block" : "none";
+  };
   document.getElementById("e-ok").onclick=()=>{
     const con=document.getElementById("e-con").value.trim();
     const mp=parseFloat(document.getElementById("e-mon").value);
@@ -962,6 +1029,8 @@ function hojaEditar(m){
     const bp=document.getElementById("e-bp").value||null;
     m.bolsa = !!bp; m.pais = bp;      // "bolsa" es sólo la etiqueta de acceso rápido
     m.concepto=con; m.fecha=document.getElementById("e-fec").value;
+    // la reserva sólo existe en bolsas; en lo demás se reserva en su propia fecha
+    m.fechaInicio = m.bolsa ? (document.getElementById("e-res").value || m.fecha) : null;
     m.nota=document.getElementById("e-nota").value.trim(); m.montoPlan=mp;
     m.categoria=document.getElementById("e-cat").value; m.tipo=document.getElementById("e-tip").value;
     if(!Array.isArray(m.abonos)) m.abonos=[];
